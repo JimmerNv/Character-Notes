@@ -33,6 +33,12 @@ local tagId = assert(cn:CreateTag("Bad Guy", "Interface\\Icons\\Ability_DualWiel
 assert(cn:Store("Alice", "A note", true, {tagId}))
 local entry = cn:Get("alice-moonguard")
 assert(entry and entry.note == "A note" and entry.punk == true)
+assert(cn:Store("Legacy", "Existing note", false))
+local legacy = cn:Get("legacy-moonguard")
+local legacyUpdated = legacy.updated
+assert(cn:SetEntryTags("Legacy", {tagId}))
+assert(legacy.note == "Existing note" and legacy.punk == false)
+assert(legacy.tags[1] == tagId and legacy.updated > legacyUpdated)
 assert(#entry.tags == 1 and entry.tags[1] == tagId)
 assert(cn:TagsForEntry(entry, "tooltip")[1].name == "Bad Guy")
 assert(cn:EntryList("bad guy")[1] == entry)

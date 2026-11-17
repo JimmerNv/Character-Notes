@@ -144,6 +144,27 @@ function CN:CloneTagIds(tags)
     return result
 end
 
+function CN:SetEntryTags(name, tags)
+    local key = self:Normalize(name)
+    local entry = key and self.db and self.db.entries[key]
+    if type(entry) ~= 'table' or entry.deleted then return false end
+
+    local normalized = self:NormalizeTagIds(tags)
+    local unchanged = #normalized == #(entry.tags or {})
+    if unchanged then
+        for index, id in ipairs(normalized) do
+            if entry.tags[index] ~= id then unchanged = false; break end
+        end
+    end
+    if unchanged then return true end
+
+    entry.tags = normalized
+    entry.updated = math.max(time(), (tonumber(entry.updated) or 0) + 1)
+    entry.writer = self.db.node
+    self:Changed(key)
+    return true
+end
+
 function CN:SanitizeTagDefinitions()
     local tags = self.db and self.db.tags
     if type(tags) ~= 'table' then return end

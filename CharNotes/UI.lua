@@ -817,6 +817,12 @@ function CN:ToggleEditorTag(id, enabled)
     end
     table.sort(nextTags)
     self.editorTags = nextTags
+    -- Existing notes persist tag assignments immediately. This avoids a
+    -- surprising second save step after closing the tag manager, while new
+    -- notes still keep the selection pending until their first normal save.
+    if self.currentName and self:Get(self.currentName) then
+        self:SetEntryTags(self.currentName, nextTags)
+    end
     self:RefreshEditorTags()
     return true
 end
