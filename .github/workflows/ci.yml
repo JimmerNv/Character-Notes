@@ -1,0 +1,29 @@
+name: Tests and package check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install Lua 5.1
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lua5.1
+      - name: Check Lua syntax and run mock tests
+        shell: bash
+        run: |
+          shopt -s failglob
+          luac5.1 -p CharNotes/*.lua
+          for test in tests/*.lua; do lua5.1 "$test"; done
+      - name: Build release archive
+        run: python3 scripts/build_release.py

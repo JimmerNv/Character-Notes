@@ -1,0 +1,18 @@
+## Interface: 16001
+## Title: |cffff9855CharNotes: PUNK|r
+## Notes: Account-wide character notes and group alerts for WoW Forever. /cn opens CharNotes. ElvUI is optional.
+## Notes-deDE: Accountweite Spielernotizen und Gruppenwarnungen für WoW Forever. /cn öffnet CharNotes. ElvUI ist optional.
+## Author: Custom
+## Version: 1.4.0-beta
+## OptionalDeps: ElvUI, Titan
+## SavedVariables: ElvUICharNotesDB
+## DefaultState: enabled
+
+Strings.lua
+Core.lua
+UI.lua
+Menu.lua
+Visuals.lua
+Sync.lua
+ElvUI.lua
+Titan.lua

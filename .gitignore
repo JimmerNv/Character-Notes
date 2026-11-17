@@ -1,0 +1,14 @@
+# Generated release artifacts
+dist/
+
+# Editor and operating-system files
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini
+
+# WoW client data (the addon source itself is tracked)
+WTF/
+Cache/
+Logs/
