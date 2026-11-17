@@ -245,6 +245,7 @@ function CN:InitializeUI()
     local nameEdit = edit(w, 482, 28, false)
     nameEdit:SetPoint('TOPLEFT', 298, -103)
     nameEdit:SetMaxLetters(128)
+    nameEdit:SetScript('OnTextChanged', function() CN:UpdateIgnoreUI() end)
     self.nameEdit = nameEdit
 
     local punk = check(w)
@@ -253,6 +254,11 @@ function CN:InitializeUI()
     self.punkCheck = punk
     local punkLabel = label(w, L.PUNK_HINT, 12)
     punkLabel:SetPoint('LEFT', punk, 'RIGHT', 9, 0)
+    local ignored = check(w)
+    ignored:SetPoint('TOPLEFT', 545, -148)
+    self.ignoreCheck = ignored
+    local ignoredLabel = label(w, L.IGNORE_HINT, 12)
+    ignoredLabel:SetPoint('LEFT', ignored, 'RIGHT', 8, 0)
     local targetButton = button(w, L.USE_TARGET, 112, 27, function()
         local _, name = CN:FromUnit('target')
         if name then
@@ -543,7 +549,9 @@ function CN:RefreshList()
         end
         b:ClearAllPoints()
         b:SetPoint('TOPLEFT', holder, 'TOPLEFT', 0, -(idx - 1) * 31)
-        b.text:SetText((entry.punk and ORANGE .. '[PUNK]|r  ' or '') .. (entry.name or '?'))
+        b.text:SetText((entry.punk and ORANGE .. '[PUNK]|r  ' or '') ..
+            (self:IsPlayerIgnored(entry.name) and '|cff7fb4ff' .. L.IGNORE_MARKER .. '|r  ' or '') ..
+            (entry.name or '?'))
         local currentKey = self.currentName and self:Normalize(self.currentName)
         local itemKey = self:Normalize(entry.name or '')
         b.selected = currentKey ~= nil and currentKey == itemKey
@@ -571,6 +579,7 @@ function CN:OpenEditor(name)
     self.nameEdit:SetText(self.currentName)
     self.noteEdit:SetText(entry and entry.note or '')
     self.punkCheck:SetChecked(entry and entry.punk or not entry)
+    self.ignoreCheck:SetChecked(name ~= '' and self:IsPlayerIgnored(self.currentName) or false)
     self.editorTags = self:CloneTagIds(entry and entry.tags)
     self:RefreshEditorTags()
     if self.noteScroll then self.noteScroll:SetVerticalScroll(0) end
@@ -583,6 +592,7 @@ function CN:SaveEditor()
     local name = self.nameEdit:GetText()
     local ok, err = self:Store(name, self.noteEdit:GetText(), self.punkCheck:GetChecked(), self.editorTags)
     if not ok then self:Print(err); return end
+    self:SetPlayerIgnored(name, self.ignoreCheck:GetChecked())
     self.currentName = name
     self:Print(L.NOTE_SAVED)
     self:RefreshList()
@@ -596,6 +606,7 @@ function CN:DeleteEditor()
     self.nameEdit:SetText('')
     self.noteEdit:SetText('')
     self.punkCheck:SetChecked(true)
+    self.ignoreCheck:SetChecked(false)
     self.editorTags = {}
     self:RefreshEditorTags()
     self:Print(L.NOTE_REMOVED)
@@ -605,7 +616,7 @@ end
 function CN:ShowTagManager()
     if not self.tagManager then
         local w = CreateFrame('Frame', 'ElvUICharNotesTagManager', UIParent)
-        w:SetSize(760, 570)
+        w:SetSize(760, 630)
         w:SetPoint('CENTER', 0, 20)
         w:SetFrameStrata('FULLSCREEN_DIALOG')
         w:SetMovable(true)
@@ -719,17 +730,22 @@ function CN:ShowTagManager()
         self.tagTooltipCheck = tooltipCheck
         local tooltipText = label(w, L.TAG_TOOLTIP, 11)
         tooltipText:SetPoint('LEFT', tooltipCheck, 'RIGHT', 7, 0)
+        local chatCheck = check(w)
+        chatCheck:SetPoint('TOPLEFT', 286, -413)
+        self.tagChatCheck = chatCheck
+        local chatText = label(w, L.TAG_CHAT, 11)
+        chatText:SetPoint('LEFT', chatCheck, 'RIGHT', 7, 0)
         local framesCheck = check(w)
-        framesCheck:SetPoint('TOPLEFT', 286, -413)
+        framesCheck:SetPoint('TOPLEFT', 286, -442)
         self.tagFramesCheck = framesCheck
         local framesText = label(w, L.TAG_FRAMES, 11)
         framesText:SetPoint('LEFT', framesCheck, 'RIGHT', 7, 0)
 
         local pointLabel = label(w, L.TAG_POSITION, 11)
-        pointLabel:SetPoint('TOPLEFT', 286, -449)
+        pointLabel:SetPoint('TOPLEFT', 286, -478)
         local point = CreateFrame('DropdownButton', nil, w, 'WowStyle2DropdownTemplate')
         point:SetWidth(190)
-        point:SetPoint('TOPLEFT', 402, -440)
+        point:SetPoint('TOPLEFT', 402, -469)
         point:SetupMenu(function(_, menu)
             for _, value in ipairs(CN.TAG_FRAME_POINTS) do
                 menu:CreateRadio(L[CN.TAG_FRAME_POINT_KEYS[value]],
@@ -738,6 +754,20 @@ function CN:ShowTagManager()
             end
         end)
         self.tagPointDropdown = point
+
+        local sizeLabel = label(w, L.TAG_FRAME_SIZE, 11)
+        sizeLabel:SetPoint('TOPLEFT', 286, -514)
+        local size = CreateFrame('DropdownButton', nil, w, 'WowStyle2DropdownTemplate')
+        size:SetWidth(190)
+        size:SetPoint('TOPLEFT', 402, -505)
+        size:SetupMenu(function(_, menu)
+            for _, value in ipairs(CN.TAG_FRAME_SIZES) do
+                menu:CreateRadio(L.TAG_SIZE_PIXELS:format(value),
+                    function(candidate) return CN.tagFrameSize == candidate end,
+                    function(candidate) CN.tagFrameSize = candidate end, value)
+            end
+        end)
+        self.tagFrameSizeDropdown = size
 
         local save = button(w, L.TAG_SAVE, 130, 30, function() CN:SaveTagEditor() end, true)
         save:SetPoint('BOTTOMLEFT', 286, 20)
@@ -793,9 +823,12 @@ function CN:SelectTag(id)
         if item == self.tagSelectedIcon then self.tagIconPage = math.ceil(index / 40); break end
     end
     self.tagTooltipCheck:SetChecked(not tag or tag.showTooltip)
+    self.tagChatCheck:SetChecked(not tag or tag.showChat)
     self.tagFramesCheck:SetChecked(tag and tag.showFrames or false)
     self.tagFramePoint = tag and tag.framePoint or 'TOPRIGHT'
+    self.tagFrameSize = tag and self:ValidTagFrameSize(tag.frameSize) or 18
     if self.tagPointDropdown then self.tagPointDropdown:Update() end
+    if self.tagFrameSizeDropdown then self.tagFrameSizeDropdown:Update() end
     self:RefreshTagIconSelection()
     self:RefreshTagManager(self.tagSelectedId, true)
 end
@@ -874,11 +907,13 @@ function CN:SaveTagEditor()
     if self.tagSelectedId then
         local ok
         ok, err = self:UpdateTag(self.tagSelectedId, self.tagNameEdit:GetText(), self.tagSelectedIcon,
-            self.tagTooltipCheck:GetChecked(), self.tagFramesCheck:GetChecked(), self.tagFramePoint)
+            self.tagTooltipCheck:GetChecked(), self.tagChatCheck:GetChecked(), self.tagFramesCheck:GetChecked(),
+            self.tagFramePoint, self.tagFrameSize)
         if ok then id = self.tagSelectedId end
     else
         id, err = self:CreateTag(self.tagNameEdit:GetText(), self.tagSelectedIcon,
-            self.tagTooltipCheck:GetChecked(), self.tagFramesCheck:GetChecked(), self.tagFramePoint)
+            self.tagTooltipCheck:GetChecked(), self.tagChatCheck:GetChecked(), self.tagFramesCheck:GetChecked(),
+            self.tagFramePoint, self.tagFrameSize)
         if id then self:ToggleEditorTag(id, true) end
     end
     if not id then self:Print(err); return end

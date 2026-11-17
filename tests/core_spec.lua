@@ -25,11 +25,12 @@ ElvUICharNotesDB = { entries = { old = { pink = true } }, config = {} }
 cn.db = cn:EnsureDB()
 assert(cn.db.entries.old.punk == true and cn.db.entries.old.pink == nil)
 assert(cn.db.config.contextMenus == true)
-assert(cn.db.schema == 3)
+assert(cn.db.schema == 4)
 assert(cn:FilterBlizzardIcons("134400")[1] == 134400)
 assert(cn:FilterBlizzardIcons("dualwield")[1] == "Interface\\Icons\\Ability_DualWield")
 
-local tagId = assert(cn:CreateTag("Bad Guy", "Interface\\Icons\\Ability_DualWield", true, true, "PORTRAIT"))
+local tagId = assert(cn:CreateTag("Bad Guy", "Interface\\Icons\\Ability_DualWield",
+    true, true, true, "PORTRAIT", 24))
 assert(cn:Store("Alice", "A note", true, {tagId}))
 local entry = cn:Get("alice-moonguard")
 assert(entry and entry.note == "A note" and entry.punk == true)
@@ -42,8 +43,10 @@ assert(legacy.tags[1] == tagId and legacy.updated > legacyUpdated)
 assert(#entry.tags == 1 and entry.tags[1] == tagId)
 assert(cn:TagsForEntry(entry, "tooltip")[1].name == "Bad Guy")
 assert(cn:EntryList("bad guy")[1] == entry)
-assert(cn:UpdateTag(tagId, "Enemy", "Interface\\Icons\\Ability_Rogue_FeignDeath", true, false, "TOPRIGHT"))
+assert(cn:UpdateTag(tagId, "Enemy", "Interface\\Icons\\Ability_Rogue_FeignDeath",
+    true, false, false, "TOPRIGHT", 20))
 assert(cn:TagsForEntry(entry)[1].name == "Enemy")
+assert(cn.db.tags[tagId].showChat == false and cn.db.tags[tagId].frameSize == 20)
 assert(cn:Delete("Alice"))
 assert(cn:Get("Alice") == nil)
 

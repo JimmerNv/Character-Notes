@@ -28,6 +28,8 @@ local function addEntries(root, name)
     if root.CreateDivider then root:CreateDivider() end
     root:CreateButton(CN.COLOR .. L.ADD_NOTE .. CN.RESET, function() runAction(CN.OpenEditor, name) end)
     root:CreateButton(CN.COLOR .. L.TOGGLE_PUNK .. CN.RESET, function() runAction(CN.TogglePunk, name) end)
+    root:CreateButton(CN.COLOR .. (CN:IsPlayerIgnored(name) and L.REMOVE_IGNORE or L.ADD_IGNORE) .. CN.RESET,
+        function() runAction(CN.ToggleIgnore, name) end)
     decorated[root] = true
 end
 

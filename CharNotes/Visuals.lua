@@ -1,4 +1,5 @@
 local _, CN = ...
+local L = CN.L
 
 local frameBorders = setmetatable({}, {__mode = 'k'})
 local frameTagIcons = setmetatable({}, {__mode = 'k'})
@@ -107,20 +108,21 @@ local function refreshTagIcons(frame, entry, enabled)
         frameTagIcons[frame] = icons
     end
     if not icons then return end
-    local pointCounts = {}
+    local pointOffsets = {}
     for index, tag in ipairs(tags) do
         local icon = icons[index]
         if not icon then
             if locked then break end
             icon = icons.parent:CreateTexture(nil, 'OVERLAY', nil, 7)
-            icon:SetSize(18, 18)
             icons[index] = icon
         end
         local point = tag.framePoint or 'TOPRIGHT'
-        pointCounts[point] = (pointCounts[point] or 0) + 1
-        local offset = (pointCounts[point] - 1) * 19
+        local size = CN:ValidTagFrameSize(tag.frameSize)
+        local offset = pointOffsets[point] or 0
+        pointOffsets[point] = offset + size + 1
         local anchor = frame
         if not locked then
+            icon:SetSize(size, size)
             icon:ClearAllPoints()
             if point == 'PORTRAIT' then
                 anchor = portraitForFrame(frame) or frame
@@ -139,6 +141,37 @@ local function refreshTagIcons(frame, entry, enabled)
         icon:Show()
     end
     for index = #tags + 1, #icons do icons[index]:Hide() end
+end
+
+local chatTagEvents = {
+    'CHAT_MSG_SAY', 'CHAT_MSG_YELL', 'CHAT_MSG_GUILD', 'CHAT_MSG_OFFICER',
+    'CHAT_MSG_PARTY', 'CHAT_MSG_PARTY_LEADER', 'CHAT_MSG_RAID', 'CHAT_MSG_RAID_LEADER',
+    'CHAT_MSG_RAID_WARNING', 'CHAT_MSG_INSTANCE_CHAT', 'CHAT_MSG_INSTANCE_CHAT_LEADER',
+    'CHAT_MSG_WHISPER', 'CHAT_MSG_WHISPER_INFORM', 'CHAT_MSG_CHANNEL',
+    'CHAT_MSG_EMOTE', 'CHAT_MSG_TEXT_EMOTE',
+}
+
+local function chatTagFilter(_, _, message, author, ...)
+    if not CN.db or CN:IsSecret(message) or CN:IsSecret(author) or
+            type(message) ~= 'string' or type(author) ~= 'string' then return false end
+    local key = CN:Normalize(author)
+    local entry = key and CN.db.entries[key]
+    if not entry or entry.deleted then return false end
+    local tags = CN:TagsForEntry(entry, 'chat')
+    if #tags == 0 then return false end
+    local icons = {}
+    for _, tag in ipairs(tags) do
+        icons[#icons + 1] = '|T' .. tostring(tag.icon) .. ':16:16|t'
+    end
+    return false, table.concat(icons, ' ') .. ' ' .. message, author, ...
+end
+
+function CN:InitializeChatTags()
+    if self.chatTagFilter or type(ChatFrame_AddMessageEventFilter) ~= 'function' then return end
+    self.chatTagFilter = chatTagFilter
+    for _, event in ipairs(chatTagEvents) do
+        pcall(ChatFrame_AddMessageEventFilter, event, chatTagFilter)
+    end
 end
 
 local function refreshUnitFrame(frame, unit, showTags)
@@ -308,7 +341,9 @@ function CN:TooltipUnit(tip, knownGroupUnit)
     if not e or e.deleted then return end
     if tooltipKeys[tip] == key then return end
     tooltipKeys[tip] = key
-    tip:AddLine('|cffff9855CharNotes' .. (e.punk and '  [PUNK]' or '') .. '|r')
+    local ignored = self:IsPlayerIgnored(e.name)
+    tip:AddLine('|cffff9855CharNotes' .. (e.punk and '  [PUNK]' or '') .. '|r' ..
+        (ignored and '  |cff7fb4ff' .. L.IGNORE_MARKER .. '|r' or ''))
     local tooltipTags = self:TagsForEntry(e, 'tooltip')
     if #tooltipTags > 0 then
         local parts = {}
@@ -345,6 +380,7 @@ function CN:HookGroupFrameTooltips()
 end
 
 function CN:InitializeVisuals()
+    self:InitializeChatTags()
     local t = GameTooltip
     if t then
         local function clearTooltipKey(tip) tooltipKeys[tip] = nil end

@@ -1,4 +1,4 @@
--- CN3 import/export tests with WoW APIs mocked. No live client behavior is tested.
+-- CN4 import/export tests with WoW APIs mocked. No live client behavior is tested.
 local function frame()
     return { RegisterEvent = function() end, SetScript = function() end }
 end
@@ -22,10 +22,11 @@ end
 
 ElvUICharNotesDB = {}
 local source = loadAddon()
-local tagId = assert(source:CreateTag("Good Guy", "Interface\\Icons\\Spell_Holy_GreaterHeal", true, true, "TOPLEFT"))
+local tagId = assert(source:CreateTag("Good Guy", "Interface\\Icons\\Spell_Holy_GreaterHeal",
+    true, true, true, "TOPLEFT", 24))
 assert(source:Store("Alice", "Helpful player", false, {tagId}))
 local exported = source:ExportData()
-assert(exported:sub(1, 4) == "CN3\n")
+assert(exported:sub(1, 4) == "CN4\n")
 
 ElvUICharNotesDB = {}
 local target = loadAddon()
@@ -36,6 +37,7 @@ local importedTag = assert(target.db.tags[imported.tags[1]])
 assert(importedTag.name == "Good Guy")
 assert(importedTag.icon == "Interface\\Icons\\Spell_Holy_GreaterHeal")
 assert(importedTag.showFrames == true and importedTag.framePoint == "TOPLEFT")
+assert(importedTag.showChat == true and importedTag.frameSize == 24)
 
 -- Guild sharing must not copy local tag definitions or assignments.
 source.pendingOut = {}
@@ -45,7 +47,7 @@ for _, packet in ipairs(source.pendingOut) do
     local part = packet.msg:match("^[GS]|%d+|%d+|%d+|([0-9A-F]+)$")
     guildPayload[#guildPayload + 1] = part
 end
-local guildExport = "CN3\n" .. table.concat(guildPayload)
+local guildExport = "CN4\n" .. table.concat(guildPayload)
 ElvUICharNotesDB = {}
 local guildTarget = loadAddon()
 assert(guildTarget:ImportData(guildExport) == 1)

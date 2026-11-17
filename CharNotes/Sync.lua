@@ -20,41 +20,54 @@ local function encodeTags(entry)
         local tag = CN.db.tags[id]
         if tag then
             records[#records + 1] = table.concat({id, hex(tag.name), hex(tostring(tag.icon)),
-                tag.showTooltip ~= false and '1' or '0', tag.showFrames and '1' or '0',
-                tag.framePoint or 'TOPRIGHT', tostring(tag.updated or 0), hex(tag.writer or '')}, ',')
+                tag.showTooltip ~= false and '1' or '0', tag.showChat ~= false and '1' or '0',
+                tag.showFrames and '1' or '0', tag.framePoint or 'TOPRIGHT',
+                tostring(CN:ValidTagFrameSize(tag.frameSize)), tostring(tag.updated or 0), hex(tag.writer or '')}, ',')
         end
     end
-    return 'T3:' .. table.concat(records, ';')
+    return 'T4:' .. table.concat(records, ';')
 end
 
 local function encode(entry, includeTags)
     return hex(table.concat({
         tostring(entry.name or ''), tostring(entry.updated or 0), tostring(entry.writer or ''),
         entry.punk and '1' or '0', entry.deleted and '1' or '0',
+        -- Guild shares intentionally omit tags; keep their empty T3 payload so
+        -- older CharNotes clients can still review the shared note text.
         includeTags == false and 'T3:' or encodeTags(entry), tostring(entry.note or ''),
     }, '\t'))
 end
 
 local function decodeTags(payload)
-    if type(payload) ~= 'string' or payload:sub(1, 3) ~= 'T3:' then return nil end
+    if type(payload) ~= 'string' or (payload:sub(1, 3) ~= 'T3:' and payload:sub(1, 3) ~= 'T4:') then return nil end
+    local version = payload:sub(1, 2)
     local ids, definitions, seen = {}, {}, {}
     local body = payload:sub(4)
     if body == '' then return ids, definitions end
     for record in body:gmatch('[^;]+') do
-        local id, nameHex, iconHex, tooltip, frames, point, stamp, writerHex =
-            record:match('^([%w_.%-]+),([0-9A-F]*),([0-9A-F]*),([01]),([01]),([A-Z]+),(%d+),([0-9A-F]*)$')
+        local id, nameHex, iconHex, tooltip, chat, frames, point, frameSize, stamp, writerHex
+        if version == 'T4' then
+            id, nameHex, iconHex, tooltip, chat, frames, point, frameSize, stamp, writerHex =
+                record:match('^([%w_.%-]+),([0-9A-F]*),([0-9A-F]*),([01]),([01]),([01]),([A-Z]+),(%d+),(%d+),([0-9A-F]*)$')
+        else
+            id, nameHex, iconHex, tooltip, frames, point, stamp, writerHex =
+                record:match('^([%w_.%-]+),([0-9A-F]*),([0-9A-F]*),([01]),([01]),([A-Z]+),(%d+),([0-9A-F]*)$')
+            chat, frameSize = '1', '18'
+        end
         local name, iconText, writer = unhex(nameHex), unhex(iconHex), unhex(writerHex)
         local icon = iconText and iconText:match('^%d+$') and tonumber(iconText) or iconText
         local updated = tonumber(stamp)
+        frameSize = tonumber(frameSize)
         if not id or #id > 80 or not name or #name > 40 or name == '' or name:find('[\r\n\t|]') or
                 not icon or not CN:IsBlizzardTagIcon(icon) or not writer or #writer > 80 or
                 not updated or updated < 0 or updated > time() + 31536000 or
+                not frameSize or frameSize < 10 or frameSize > 40 or frameSize ~= math.floor(frameSize) or
                 not CN.TAG_FRAME_POINT_KEYS[point] or seen[id] then return nil end
         seen[id] = true
         ids[#ids + 1] = id
         definitions[#definitions + 1] = {id = id, name = name, icon = icon,
-            showTooltip = tooltip == '1', showFrames = frames == '1', framePoint = point,
-            updated = updated, writer = writer}
+            showTooltip = tooltip == '1', showChat = chat == '1', showFrames = frames == '1',
+            framePoint = point, frameSize = frameSize, updated = updated, writer = writer}
         if #ids > CN.MAX_TAGS_PER_ENTRY then return nil end
     end
     return ids, definitions
@@ -64,7 +77,7 @@ local function decode(data)
     local raw = unhex(data)
     if not raw then return nil end
     local name, stamp, writer, punk, deleted, tagPayload, note =
-        raw:match('^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(T3:[^\t]*)\t(.*)$')
+        raw:match('^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(T[34]:[^\t]*)\t(.*)$')
     local tagIds, tagDefinitions
     if tagPayload then
         tagIds, tagDefinitions = decodeTags(tagPayload)
@@ -105,7 +118,7 @@ function CN:MergeEntry(key, record, tagDefinitions)
 end
 
 function CN:ExportData()
-    local lines = {'CN3'}
+    local lines = {'CN4'}
     local keys = {}
     for key, e in pairs(self.db.entries) do
         if type(e) == 'table' then keys[#keys + 1] = key end
@@ -118,12 +131,13 @@ end
 function CN:ImportData(data)
     if type(data) ~= 'string' or #data > 8000000 then return nil, L.INVALID_EXPORT end
     data = data:gsub('\r\n', '\n')
-    if data:sub(1, 4) ~= 'CN2\n' and data ~= 'CN2' and data:sub(1, 4) ~= 'CN3\n' and data ~= 'CN3' then
+    if data:sub(1, 4) ~= 'CN2\n' and data ~= 'CN2' and data:sub(1, 4) ~= 'CN3\n' and data ~= 'CN3' and
+            data:sub(1, 4) ~= 'CN4\n' and data ~= 'CN4' then
         return nil, L.INVALID_EXPORT_FORMAT
     end
     local imported, checked = 0, 0
     for line in (data .. '\n'):gmatch('(.-)\n') do
-        if line ~= '' and line ~= 'CN2' and line ~= 'CN3' then
+        if line ~= '' and line ~= 'CN2' and line ~= 'CN3' and line ~= 'CN4' then
             checked = checked + 1
             if checked > 8000 or #line > MAX_EXPORT_LINE then return nil, L.IMPORT_LIMIT end
             local key, record, tagDefinitions = decode(line)

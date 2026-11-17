@@ -3,6 +3,7 @@ local L = CN.L
 
 CN.MAX_TAGS_PER_ENTRY = 12
 CN.TAG_FRAME_POINTS = {'TOPLEFT', 'TOPRIGHT', 'BOTTOMLEFT', 'BOTTOMRIGHT', 'PORTRAIT'}
+CN.TAG_FRAME_SIZES = {12, 14, 16, 18, 20, 24, 28, 32, 36, 40}
 CN.TAG_FRAME_POINT_KEYS = {
     TOPLEFT = 'TAG_POSITION_TOPLEFT', TOPRIGHT = 'TAG_POSITION_TOPRIGHT',
     BOTTOMLEFT = 'TAG_POSITION_BOTTOMLEFT', BOTTOMRIGHT = 'TAG_POSITION_BOTTOMRIGHT',
@@ -118,6 +119,19 @@ local function validPoint(point)
     return CN.TAG_FRAME_POINT_KEYS[point] and point or 'TOPRIGHT'
 end
 
+local function validFrameSize(size)
+    size = tonumber(size)
+    if not size then return 18 end
+    size = math.floor(size + .5)
+    if size < 10 then return 10 end
+    if size > 40 then return 40 end
+    return size
+end
+
+function CN:ValidTagFrameSize(size)
+    return validFrameSize(size)
+end
+
 function CN:IsBlizzardTagIcon(icon)
     self:GetBlizzardIconCatalog()
     return (type(icon) == 'string' or type(icon) == 'number') and iconSet[icon] == true
@@ -178,8 +192,10 @@ function CN:SanitizeTagDefinitions()
                 tag.id = id
                 if not self:IsBlizzardTagIcon(tag.icon) then tag.icon = self.BLIZZARD_ICONS[1][1] end
                 tag.showTooltip = tag.showTooltip ~= false
+                tag.showChat = tag.showChat ~= false
                 tag.showFrames = tag.showFrames == true
                 tag.framePoint = validPoint(tag.framePoint)
+                tag.frameSize = validFrameSize(tag.frameSize)
                 tag.updated = tonumber(tag.updated) or 0
                 tag.writer = type(tag.writer) == 'string' and tag.writer or self.db.node
             end
@@ -193,7 +209,7 @@ function CN:TagsForEntry(entry, target)
     for _, id in ipairs(entry.tags or {}) do
         local tag = self.db and self.db.tags[id]
         if tag and (target == nil or (target == 'tooltip' and tag.showTooltip) or
-                (target == 'frames' and tag.showFrames)) then
+                (target == 'chat' and tag.showChat) or (target == 'frames' and tag.showFrames)) then
             result[#result + 1] = tag
         end
     end
@@ -234,7 +250,7 @@ local function touchEntries(self, id, remove)
     if changed then self:Changed(changed) end
 end
 
-function CN:CreateTag(name, icon, showTooltip, showFrames, framePoint)
+function CN:CreateTag(name, icon, showTooltip, showChat, showFrames, framePoint, frameSize)
     name = cleanName(name)
     if not name then return nil, L.TAG_NAME_INVALID end
     if duplicateName(self, name) then return nil, L.TAG_NAME_DUPLICATE end
@@ -245,11 +261,12 @@ function CN:CreateTag(name, icon, showTooltip, showFrames, framePoint)
         id = self.db.node .. '-' .. tostring(self.db.tagSequence)
     until not self.db.tags[id]
     self.db.tags[id] = {id = id, name = name, icon = icon, showTooltip = showTooltip ~= false,
-        showFrames = showFrames == true, framePoint = validPoint(framePoint), updated = time(), writer = self.db.node}
+        showChat = showChat ~= false, showFrames = showFrames == true, framePoint = validPoint(framePoint),
+        frameSize = validFrameSize(frameSize), updated = time(), writer = self.db.node}
     return id
 end
 
-function CN:UpdateTag(id, name, icon, showTooltip, showFrames, framePoint)
+function CN:UpdateTag(id, name, icon, showTooltip, showChat, showFrames, framePoint, frameSize)
     local tag = self.db.tags[id]
     name = cleanName(name)
     if not tag then return false, L.TAG_NOT_FOUND end
@@ -257,8 +274,9 @@ function CN:UpdateTag(id, name, icon, showTooltip, showFrames, framePoint)
     if duplicateName(self, name, id) then return false, L.TAG_NAME_DUPLICATE end
     if not self:IsBlizzardTagIcon(icon) then return false, L.TAG_ICON_INVALID end
     tag.name, tag.icon = name, icon
-    tag.showTooltip, tag.showFrames = showTooltip ~= false, showFrames == true
+    tag.showTooltip, tag.showChat, tag.showFrames = showTooltip ~= false, showChat ~= false, showFrames == true
     tag.framePoint = validPoint(framePoint)
+    tag.frameSize = validFrameSize(frameSize)
     tag.updated, tag.writer = math.max(time(), (tag.updated or 0) + 1), self.db.node
     touchEntries(self, id, false)
     if self.RefreshTagManager then self:RefreshTagManager(id) end
@@ -281,8 +299,9 @@ function CN:ImportTagDefinitions(definitions)
                 (incoming.updated == old.updated and (incoming.writer or '') > (old.writer or ''))
             if replace then
                 self.db.tags[incoming.id] = {id = incoming.id, name = cleanName(incoming.name), icon = incoming.icon,
-                    showTooltip = incoming.showTooltip ~= false, showFrames = incoming.showFrames == true,
-                    framePoint = validPoint(incoming.framePoint), updated = tonumber(incoming.updated) or 0,
+                    showTooltip = incoming.showTooltip ~= false, showChat = incoming.showChat ~= false,
+                    showFrames = incoming.showFrames == true, framePoint = validPoint(incoming.framePoint),
+                    frameSize = validFrameSize(incoming.frameSize), updated = tonumber(incoming.updated) or 0,
                     writer = type(incoming.writer) == 'string' and incoming.writer or ''}
             end
         end

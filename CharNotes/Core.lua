@@ -2,7 +2,7 @@ local ADDON, CN = ...
 local L = CN.L
 _G.ElvUI_CharNotes = CN
 CN.ADDON = ADDON
-CN.VERSION = '1.7.0'
+CN.VERSION = '1.8.0'
 CN.COLOR = '|cffff9855'
 CN.RESET = '|r'
 CN.db = nil
@@ -89,6 +89,7 @@ function CN:EnsureDB()
     self.db = d
     if type(d.entries) ~= 'table' then d.entries = {} end
     if type(d.tags) ~= 'table' then d.tags = {} end
+    if type(d.ignored) ~= 'table' then d.ignored = {} end
     if type(d.trusted) ~= 'table' then d.trusted = {} end
     if type(d.inbox) ~= 'table' then d.inbox = {} end
     if type(d.config) ~= 'table' then d.config = {} end
@@ -118,7 +119,7 @@ function CN:EnsureDB()
             e.tags = self:NormalizeTagIds(e.tags)
         end
     end
-    d.schema = 3
+    d.schema = 4
     return d
 end
 
@@ -165,6 +166,125 @@ function CN:TogglePunk(name)
     local newValue = not (old and old.punk)
     local ok, err = self:Store(name, old and old.note or '', newValue, old and old.tags)
     if ok then self:Print((newValue and L.PUNK_MARKED or L.PUNK_UNMARKED):format(old and old.name or name)) end
+    return ok, err
+end
+
+local function ignoreCount()
+    local api = C_FriendList and C_FriendList.GetNumIgnores
+    if type(api) == 'function' then
+        local ok, count = pcall(api)
+        if ok and type(count) == 'number' then return count end
+    end
+    if type(GetNumIgnores) == 'function' then
+        local ok, count = pcall(GetNumIgnores)
+        if ok and type(count) == 'number' then return count end
+    end
+end
+
+local function ignoreNameAt(index)
+    local api = C_FriendList and C_FriendList.GetIgnoreName
+    if type(api) == 'function' then
+        local ok, name = pcall(api, index)
+        if ok and type(name) == 'string' then return name end
+    end
+    api = C_FriendList and C_FriendList.GetIgnoreInfo
+    if type(api) == 'function' then
+        local ok, info = pcall(api, index)
+        if ok then
+            if type(info) == 'string' then return info end
+            if type(info) == 'table' then return info.name or info.fullName or info.accountName end
+        end
+    end
+    if type(GetIgnoreName) == 'function' then
+        local ok, name = pcall(GetIgnoreName, index)
+        if ok and type(name) == 'string' then return name end
+    end
+end
+
+function CN:FindIgnoredName(name)
+    local key = self:Normalize(name)
+    if not key then return nil end
+    local count = ignoreCount()
+    if count ~= nil then
+        for index = 1, count do
+            local ignoredName = ignoreNameAt(index)
+            local ignoredKey = ignoredName and self:Normalize(ignoredName)
+            if ignoredKey == key then
+                self.db.ignored[key] = ignoredName
+                return ignoredName
+            end
+        end
+        self.db.ignored[key] = nil
+        return nil
+    end
+    return self.db and self.db.ignored[key] or nil
+end
+
+function CN:IsPlayerIgnored(name)
+    return self:FindIgnoredName(name) ~= nil
+end
+
+function CN:RefreshIgnoreCache()
+    if not self.db then return end
+    local count = ignoreCount()
+    if count == nil then return end
+    local nextIgnored = {}
+    for index = 1, count do
+        local name = ignoreNameAt(index)
+        if name then
+            local key, label = self:Normalize(name)
+            if key then nextIgnored[key] = label end
+        end
+    end
+    self.db.ignored = nextIgnored
+end
+
+function CN:UpdateIgnoreUI()
+    if not self.ignoreCheck or not self.nameEdit then return end
+    local name = self.nameEdit:GetText()
+    self.ignoreCheck:SetChecked(name ~= '' and self:IsPlayerIgnored(name) or false)
+end
+
+local function changeIgnore(name, ignored)
+    local api
+    if ignored then
+        api = C_FriendList and C_FriendList.AddIgnore or _G.AddIgnore
+    else
+        api = C_FriendList and C_FriendList.DelIgnore or _G.DelIgnore
+    end
+    if type(api) ~= 'function' then return false end
+    local ok, result = pcall(api, name)
+    return ok and result ~= false
+end
+
+function CN:SetPlayerIgnored(name, ignored, silent)
+    local key, label = self:Normalize(name)
+    if not key then return false, L.INVALID_CHARACTER end
+    ignored = not not ignored
+    local listedName = self:FindIgnoredName(label)
+    if ignored == (listedName ~= nil) then return true, false end
+    if not changeIgnore(listedName or label, ignored) then
+        if not silent then self:Print(L.IGNORE_UNAVAILABLE) end
+        return false, L.IGNORE_UNAVAILABLE
+    end
+    if ignored then self.db.ignored[key] = label else self.db.ignored[key] = nil end
+    if not silent then
+        self:Print((ignored and L.IGNORE_ADDED or L.IGNORE_REMOVED):format(label))
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(.4, function()
+            CN:RefreshIgnoreCache()
+            CN:UpdateIgnoreUI()
+            if CN.RefreshList then CN:RefreshList() end
+        end)
+    end
+    return true, true
+end
+
+function CN:ToggleIgnore(name)
+    local ignored = not self:IsPlayerIgnored(name)
+    local ok, err = self:SetPlayerIgnored(name, ignored)
+    if ok and ignored and not self:Get(name) then self:Store(name, '', false, {}) end
     return ok, err
 end
 
@@ -375,6 +495,8 @@ function CN:Slash(text)
         if rest ~= '' then self:OpenEditor(rest) else self:Print(L.ENTER_CHARACTER) end
     elseif cmd == 'mark' or cmd == 'punk' then
         if rest ~= '' then self:TogglePunk(rest) else self:Print(L.USAGE_PUNK) end
+    elseif cmd == 'ignore' then
+        if rest ~= '' then self:ToggleIgnore(rest) else self:Print(L.USAGE_IGNORE) end
     elseif cmd == 'note' then
         local who, note = rest:match('^(%S+)%s*|%s*(.*)$')
         if who then
@@ -421,6 +543,7 @@ CN.events:RegisterEvent('ADDON_LOADED')
 CN.events:RegisterEvent('PLAYER_LOGIN')
 CN.events:RegisterEvent('PLAYER_ENTERING_WORLD')
 CN.events:RegisterEvent('GROUP_ROSTER_UPDATE')
+pcall(CN.events.RegisterEvent, CN.events, 'IGNORELIST_UPDATE')
 
 CN.startup = CN.startup or {}
 local function startPart(id, fn)
@@ -489,6 +612,10 @@ CN.events:SetScript('OnEvent', function(_, event, addon)
         end
     elseif event == 'PLAYER_LOGIN' then
         CN:FinishInitialize()
+    elseif CN.initialized and event == 'IGNORELIST_UPDATE' then
+        CN:RefreshIgnoreCache()
+        CN:UpdateIgnoreUI()
+        if CN.RefreshList then CN:RefreshList() end
     elseif CN.initialized and (event == 'PLAYER_ENTERING_WORLD' or event == 'GROUP_ROSTER_UPDATE') then
         CN:CheckGroup()
         if CN.RefreshHighlights then CN:RefreshHighlights() end
