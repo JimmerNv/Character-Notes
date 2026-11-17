@@ -372,11 +372,15 @@ end
 function CN:UpdateSoundUI()
     if not self.db then return end
     local sound = self:SelectedSound()
-    if self.soundCycleButton then self.soundCycleButton:SetText(sound.title .. '  >') end
+    if self.soundCycleButton then self.soundCycleButton:SetText(L[sound.titleKey] .. '  >') end
     if self.soundEnableCheck then self.soundEnableCheck:SetChecked(self.db.config.sound) end
     if self.soundChoices then
         for key, box in pairs(self.soundChoices) do box:SetChecked(key == sound.key) end
     end
+end
+
+function CN:UpdateLanguageUI()
+    if self.languageDropdown then self.languageDropdown:Update() end
 end
 
 local function optionCheck(panel, text, y, onClick)
@@ -392,7 +396,7 @@ function CN:ShowOptions()
     if not self.window then return end
     if not self.optionsPanel then
         local panel = CreateFrame('Frame', nil, self.window)
-        panel:SetSize(362, 397)
+        panel:SetSize(362, 455)
         panel:SetPoint('TOPRIGHT', self.window, 'TOPRIGHT', -19, -66)
         panel:EnableMouse(true)
         backdrop(panel)
@@ -404,29 +408,52 @@ function CN:ShowOptions()
         title:SetPoint('TOPLEFT', 16, -13)
         local close = button(panel, 'X', 24, 24, function() panel:Hide() end)
         close:SetPoint('TOPRIGHT', -9, -9)
+
+        local languageHeading = label(panel, L.LANGUAGE, 12)
+        languageHeading:SetPoint('TOPLEFT', 16, -47)
+        local dropdown = CreateFrame('DropdownButton', nil, panel, 'WowStyle2DropdownTemplate')
+        dropdown:SetWidth(154)
+        dropdown:SetPoint('TOPRIGHT', -20, -40)
+        dropdown:SetupMenu(function(_, menu)
+            local function isSelected(language)
+                return CN.db.config.language == language
+            end
+            local function selectLanguage(language)
+                CN:SetLanguage(language)
+            end
+            for _, language in ipairs(CN.LANGUAGE_ORDER) do
+                menu:CreateRadio(L[CN.LANGUAGE_LABEL_KEYS[language]], isSelected, selectLanguage, language)
+            end
+            if #CN.LANGUAGE_ORDER > 7 then menu:SetScrollMode(180) end
+        end)
+        self.languageDropdown = dropdown
+        local reloadHint = label(panel, L.LANGUAGE_RELOAD, 10, 'muted')
+        reloadHint:SetPoint('TOPLEFT', 16, -73)
+        separator(panel, 16, -92, 330)
+
         local heading = label(panel, L.SOUND_ON_JOIN, 12, 'muted')
-        heading:SetPoint('TOPLEFT', 16, -72)
+        heading:SetPoint('TOPLEFT', 16, -131)
         local preview = button(panel, L.PREVIEW, 99, 24, function() CN:PlayAlertSound(true) end)
-        preview:SetPoint('TOPRIGHT', -16, -67)
+        preview:SetPoint('TOPRIGHT', -16, -126)
         self.soundChoices = {}
         for i, sound in ipairs(self.SOUNDS) do
             local key = sound.key
-            self.soundChoices[key] = optionCheck(panel, sound.title, 101 + (i - 1) * 24, function()
+            self.soundChoices[key] = optionCheck(panel, L[sound.titleKey], 160 + (i - 1) * 24, function()
                 CN:SetSoundChoice(key)
             end)
         end
 
-        separator(panel, 16, -219, 330)
+        separator(panel, 16, -278, 330)
         local appearance = label(panel, L.DISPLAY_OPTIONS, 12, 'muted')
-        appearance:SetPoint('TOPLEFT', 16, -231)
+        appearance:SetPoint('TOPLEFT', 16, -290)
         self.optionChecks = {}
         local options = {
-            {'sound', L.ENABLE_GROUP_SOUND, 42},
-            {'popup', L.GROUP_POPUP, 255},
-            {'border', L.PUNK_BORDER, 282},
-            {'tooltip', L.TOOLTIP_NOTE, 309},
-            {'alertAnyNote', L.ALERT_ALL_NOTES, 336},
-            {'contextMenus', L.PLAYER_MENUS, 363},
+            {'sound', L.ENABLE_GROUP_SOUND, 101},
+            {'popup', L.GROUP_POPUP, 314},
+            {'border', L.PUNK_BORDER, 341},
+            {'tooltip', L.TOOLTIP_NOTE, 368},
+            {'alertAnyNote', L.ALERT_ALL_NOTES, 395},
+            {'contextMenus', L.PLAYER_MENUS, 422},
         }
         for _, option in ipairs(options) do
             local key = option[1]
@@ -434,9 +461,11 @@ function CN:ShowOptions()
                 CN:SetOption(key, not not box:GetChecked())
             end)
         end
+
     end
     for key, box in pairs(self.optionChecks) do box:SetChecked(self.db.config[key]) end
     self:UpdateSoundUI()
+    self:UpdateLanguageUI()
     self.optionsPanel:SetFrameLevel(self.window:GetFrameLevel() + 15)
     self.optionsPanel:Show()
 end

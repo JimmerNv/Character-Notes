@@ -2,7 +2,7 @@ local ADDON, CN = ...
 local L = CN.L
 _G.ElvUI_CharNotes = CN
 CN.ADDON = ADDON
-CN.VERSION = '1.4.0-beta'
+CN.VERSION = '1.5.1-beta'
 CN.COLOR = '|cffff9855'
 CN.RESET = '|r'
 CN.db = nil
@@ -91,6 +91,7 @@ function CN:EnsureDB()
     if type(d.inbox) ~= 'table' then d.inbox = {} end
     if type(d.config) ~= 'table' then d.config = {} end
     local c = d.config
+    if not self.LANGUAGE_LABEL_KEYS[c.language] then c.language = 'client' end
     if type(c.sound) ~= 'boolean' then c.sound = true end
     if type(c.soundChoice) ~= 'string' then c.soundChoice = 'RAID_WARNING' end
     if type(c.popup) ~= 'boolean' then c.popup = true end
@@ -185,11 +186,11 @@ function CN:EntryList(query)
 end
 
 CN.SOUNDS = {
-    {key = 'RAID_WARNING', title = L.SOUND_RAID_WARNING},
-    {key = 'ALARM_CLOCK_WARNING_1', title = L.SOUND_ALARM_CLOCK},
-    {key = 'READY_CHECK', title = L.SOUND_READY_CHECK},
-    {key = 'TELL_MESSAGE', title = L.SOUND_MESSAGE},
-    {key = 'LEVEL_UP', title = L.SOUND_LEVEL_UP, fallbackKey = 'UI_GARRISON_COMMAND_TABLE_FOLLOWER_LEVEL_UP'},
+    {key = 'RAID_WARNING', titleKey = 'SOUND_RAID_WARNING'},
+    {key = 'ALARM_CLOCK_WARNING_1', titleKey = 'SOUND_ALARM_CLOCK'},
+    {key = 'READY_CHECK', titleKey = 'SOUND_READY_CHECK'},
+    {key = 'TELL_MESSAGE', titleKey = 'SOUND_MESSAGE'},
+    {key = 'LEVEL_UP', titleKey = 'SOUND_LEVEL_UP', fallbackKey = 'UI_GARRISON_COMMAND_TABLE_FOLLOWER_LEVEL_UP'},
 }
 
 function CN:SelectedSound()
@@ -219,6 +220,24 @@ function CN:PlayAlertSound(test)
     end
     if test and not id then self:Print(L.NO_SOUND_KIT) end
     if id and PlaySound then pcall(PlaySound, id, 'Master') end
+end
+
+function CN:SetLanguage(language)
+    if not self.LANGUAGE_LABEL_KEYS[language] then
+        self:Print(L.LANGUAGE_USAGE)
+        return false
+    end
+    self.db.config.language = language
+    if self.UpdateLanguageUI then self:UpdateLanguageUI() end
+    if self:ResolveLocale(language) ~= self.locale then
+        local reload = (C_UI and C_UI.Reload) or ReloadUI
+        if type(reload) == 'function' then
+            local ok, result = pcall(reload)
+            if ok and result ~= false then return true end
+        end
+        self:Print(L.LANGUAGE_RELOAD_MANUAL)
+    end
+    return true
 end
 
 function CN:SetOption(key, enabled)
@@ -325,7 +344,7 @@ function CN:ResolveContext(data, owner)
 end
 
 function CN:Help()
-    for _, key in ipairs({'HELP_MAIN', 'HELP_OPTIONS', 'HELP_NOTE', 'HELP_SYNC', 'HELP_MISC'}) do
+    for _, key in ipairs({'HELP_MAIN', 'HELP_OPTIONS', 'LANGUAGE_USAGE', 'HELP_NOTE', 'HELP_SYNC', 'HELP_MISC'}) do
         self:Print(L[key])
     end
 end
@@ -338,6 +357,7 @@ function CN:Slash(text)
     if cmd == 'help' then self:Help()
     elseif cmd == 'status' or cmd == 'diag' then self:Status()
     elseif cmd == 'options' then self:ShowOptions()
+    elseif cmd == 'language' then self:SetLanguage(rest:lower())
     elseif cmd == 'add' or cmd == 'edit' then
         if rest ~= '' then self:OpenEditor(rest) else self:Print(L.ENTER_CHARACTER) end
     elseif cmd == 'mark' or cmd == 'punk' then
@@ -363,7 +383,7 @@ function CN:Slash(text)
             self:Print(rest == 'on' and L.SOUND_ENABLED or L.SOUND_DISABLED)
         else
             local sound = self:SelectedSound()
-            self:Print(L.SOUND_STATE:format(sound.title))
+            self:Print(L.SOUND_STATE:format(L[sound.titleKey]))
         end
     elseif cmd == 'target' then
         local _, name = self:FromUnit('target')
@@ -416,8 +436,14 @@ function CN:Status()
     end
 end
 
+local function loadSettings()
+    if CN.db then return end
+    CN.db = CN:EnsureDB()
+    CN:LoadLocale(CN.db.config.language)
+end
+
 function CN:FinishInitialize()
-    if not self.db then self.db = self:EnsureDB() end
+    loadSettings()
     if self.initialized then return end
     self.initialized = true
     -- Problems in one integration must not block slash commands or other modules.
@@ -435,7 +461,7 @@ end
 CN.events:SetScript('OnEvent', function(_, event, addon)
     if event == 'ADDON_LOADED' then
         if addon == ADDON then
-            CN.db = CN:EnsureDB()
+            loadSettings()
         elseif CN.initialized then
             if addon == 'Blizzard_Menu' or addon == 'Blizzard_UnitPopup' or addon == 'Blizzard_UnitPopupShared' then
                 CN:RegisterMenus()
@@ -445,7 +471,7 @@ CN.events:SetScript('OnEvent', function(_, event, addon)
                 CN:TryRegisterElvUIOptions()
             end
         end
-        if (addon == ADDON or addon == 'Titan') and type(_G.TitanPanelButton_OnLoad) == 'function' then
+        if CN.db and (addon == ADDON or addon == 'Titan') and type(_G.TitanPanelButton_OnLoad) == 'function' then
             startPart('Titan', function() CN:InitializeTitan() end)
         end
     elseif event == 'PLAYER_LOGIN' then

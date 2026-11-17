@@ -20,6 +20,10 @@ local function getPluginLibrary(E)
 end
 
 local function optionsTable()
+    local languages = {}
+    for _, language in ipairs(CN.LANGUAGE_ORDER) do
+        languages[language] = L[CN.LANGUAGE_LABEL_KEYS[language]]
+    end
     return {
         type = 'group', name = 'CharNotes (PUNK)', order = 900,
         args = {
@@ -27,13 +31,17 @@ local function optionsTable()
                 name = L.ELVUI_OVERVIEW },
             open = { type = 'execute', name = L.OPEN_NOTES, order = 2,
                 func = function() CN:ShowWindow() end },
+            language = { type = 'select', name = L.LANGUAGE, order = 2.5,
+                desc = L.LANGUAGE_RELOAD, values = languages, sorting = CN.LANGUAGE_ORDER,
+                get = function() return CN.db.config.language end,
+                set = function(_, value) CN:SetLanguage(value) end },
             sound = { type = 'toggle', name = L.ENABLE_GROUP_SOUND, order = 3,
                 get = function() return CN.db.config.sound end,
                 set = function(_, value) CN:SetOption('sound', value) end },
             soundChoice = { type = 'select', name = L.SOUND_ON_JOIN, order = 4,
                 values = (function()
                     local result = {}
-                    for _, item in ipairs(CN.SOUNDS) do result[item.key] = item.title end
+                    for _, item in ipairs(CN.SOUNDS) do result[item.key] = L[item.titleKey] end
                     return result
                 end)(),
                 get = function() return CN:SelectedSound().key end,

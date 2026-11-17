@@ -4,6 +4,13 @@ local _, CN = ...
 local strings = {
     SUBTITLE = { enUS = "Account-wide character notes", deDE = "Accountweite Spielernotizen" },
     OPTIONS = { enUS = "Options", deDE = "Optionen" },
+    LANGUAGE = { enUS = "Language", deDE = "Sprache" },
+    LANGUAGE_CLIENT = { enUS = "WoW Client", deDE = "WoW-Client" },
+    LANGUAGE_ENGLISH = { enUS = "English", deDE = "English" },
+    LANGUAGE_GERMAN = { enUS = "Deutsch", deDE = "Deutsch" },
+    LANGUAGE_RELOAD = { enUS = "Changing the language reloads the interface.", deDE = "Ein Sprachwechsel lädt die Oberfläche neu." },
+    LANGUAGE_RELOAD_MANUAL = { enUS = "Language saved. Type /reload to apply it.", deDE = "Sprache gespeichert. Gib /reload ein, um sie zu übernehmen." },
+    LANGUAGE_USAGE = { enUS = "Use /cn language en, /cn language de, or /cn language client.", deDE = "Nutze /cn language en, /cn language de oder /cn language client." },
     PLAYERS_HEADER = { enUS = "PLAYERS", deDE = "SPIELER" },
     SEARCH_HINT = { enUS = "Search names or notes", deDE = "Name oder Notiz suchen" },
     EMPTY_LIST = { enUS = "No notes yet.", deDE = "Noch keine Notizen vorhanden." },
@@ -81,7 +88,7 @@ local strings = {
     GROUP_REASON = { enUS = "Note: %s", deDE = "Notiz: %s" },
     MARKED_PLAYER = { enUS = "Marked player.", deDE = "Markierter Spieler." },
     HELP_MAIN = { enUS = "/cn - notes; /cn add Name-Realm; /cn target; /cn punk Name-Realm", deDE = "/cn - Notizliste; /cn add Name-Realm; /cn target; /cn punk Name-Realm" },
-    HELP_OPTIONS = { enUS = "/cn options - settings for sound, popup, border and tooltip", deDE = "/cn options - Einstellungen für Warnton, Warnfenster, Rahmen und Tooltip" },
+    HELP_OPTIONS = { enUS = "/cn options - language, sound, popup, border and tooltip", deDE = "/cn options - Sprache, Warnton, Warnfenster, Rahmen und Tooltip" },
     HELP_NOTE = { enUS = "/cn note Name-Realm | Text; /cn sound next|test|on|off; /cn guild Name-Realm", deDE = "/cn note Name-Realm | Text; /cn sound next|test|on|off; /cn guild Name-Realm" },
     HELP_SYNC = { enUS = "/cn inbox; /cn trust Name-Realm; /cn untrust Name-Realm; /cn peers; /cn sync Name-Realm", deDE = "/cn inbox; /cn trust Name-Realm; /cn untrust Name-Realm; /cn peers; /cn sync Name-Realm" },
     HELP_MISC = { enUS = "/cn export; /cn import; /cn menus on|off; /cn status; /cn help", deDE = "/cn export; /cn import; /cn menus on|off; /cn status; /cn help" },
@@ -150,8 +157,26 @@ local strings = {
     SYNC_UNAVAILABLE = { enUS = "Addon messaging is unavailable. Import and export still work.", deDE = "Addon-Kommunikation konnte nicht registriert werden. Import und Export funktionieren weiter." },
 }
 
-local locale = GetLocale and GetLocale() or 'enUS'
 CN.L = {}
-for key, translations in pairs(strings) do
-    CN.L[key] = translations[locale] or translations.enUS
+CN.LANGUAGE_ORDER = {'client', 'de', 'en'}
+CN.LANGUAGE_LABEL_KEYS = {
+    client = 'LANGUAGE_CLIENT',
+    de = 'LANGUAGE_GERMAN',
+    en = 'LANGUAGE_ENGLISH',
+}
+local languageLocales = {de = 'deDE', en = 'enUS'}
+
+function CN:ResolveLocale(language)
+    local locale = languageLocales[language] or (GetLocale and GetLocale())
+    return locale == 'deDE' and 'deDE' or 'enUS'
 end
+
+function CN:LoadLocale(language)
+    self.locale = self:ResolveLocale(language)
+    -- Keep the table shared by the UI, menu and integration modules.
+    for key, translations in pairs(strings) do
+        self.L[key] = translations[self.locale] or translations.enUS
+    end
+end
+
+CN:LoadLocale('client')
