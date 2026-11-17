@@ -3,13 +3,14 @@
 ## Notes: Account-wide character notes and group alerts for WoW Forever. /cn opens CharNotes. ElvUI is optional.
 ## Notes-deDE: Accountweite Spielernotizen und Gruppenwarnungen für WoW Forever. /cn öffnet CharNotes. ElvUI ist optional.
 ## Author: Custom
-## Version: 1.5.1-beta
+## Version: 1.6.0-beta
 ## OptionalDeps: ElvUI, Titan
 ## SavedVariables: ElvUICharNotesDB
 ## DefaultState: enabled
 
 Strings.lua
 Core.lua
+Tags.lua
 UI.lua
 Menu.lua
 Visuals.lua

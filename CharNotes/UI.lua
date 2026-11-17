@@ -270,18 +270,18 @@ function CN:InitializeUI()
     self.noteCounter = count
     local noteBox = CreateFrame('Frame', nil, w)
     noteBox:SetPoint('TOPLEFT', 298, -201)
-    noteBox:SetSize(482, 255)
+    noteBox:SetSize(482, 215)
     backdrop(noteBox, .65)
     local noteScroll = CreateFrame('ScrollFrame', nil, noteBox)
     noteScroll:SetPoint('TOPLEFT', 9, -9)
     noteScroll:SetPoint('BOTTOMRIGHT', -18, 9)
-    local note = edit(noteScroll, 449, 237, true)
+    local note = edit(noteScroll, 449, 197, true)
     noteScroll:SetScrollChild(note)
     self.noteEdit = note
     self.noteScroll = noteScroll
     self.refreshNoteScroll = addScrollControl(noteBox, noteScroll, note, 38)
     note:SetScript('OnTextChanged', function(self)
-        resizeEditToContent(self, noteScroll, CN.refreshNoteScroll, 236)
+        resizeEditToContent(self, noteScroll, CN.refreshNoteScroll, 196)
         local len = #(self:GetText() or '')
         count:SetText(L.NOTE_SIZE:format(len))
         if len > 1200 then count:SetTextColor(1, .37, .38) else count:SetTextColor(.65, .69, .76) end
@@ -297,6 +297,15 @@ function CN:InitializeUI()
         end
         if math.abs(target - offset) > 1 then noteScroll:SetVerticalScroll(target) end
     end)
+
+    local tags = button(w, L.EDIT_TAGS, 105, 31, function() CN:ShowTagManager() end)
+    tags:SetPoint('TOPLEFT', 298, -429)
+    local tagSummary = CreateFrame('Frame', nil, w)
+    tagSummary:SetPoint('LEFT', tags, 'RIGHT', 9, 0)
+    tagSummary:SetSize(368, 31)
+    self.tagSummary = tagSummary
+    self.tagSummaryIcons = {}
+    self.editorTags = {}
 
     local save = button(w, L.SAVE, 107, 31, function() CN:SaveEditor() end, true)
     save:SetPoint('TOPLEFT', 298, -483)
@@ -360,13 +369,43 @@ function CN:InitializeUI()
     -- dialogs so a frame above the game menu cannot intercept its clicks.
     if EventRegistry and EventRegistry.RegisterCallback then
         EventRegistry:RegisterCallback('GameMenuFrame.Shown', function()
-            for _, name in ipairs({'window', 'transfer', 'guildInboxWindow', 'guildInboxDetail', 'guildShareConfirm', 'alert'}) do
+            for _, name in ipairs({'window', 'transfer', 'guildInboxWindow', 'guildInboxDetail', 'guildShareConfirm', 'tagManager', 'alert'}) do
                 local frame = CN[name]
                 if frame then frame:Hide() end
             end
             CN.pendingGuildShareName = nil
         end, self)
     end
+end
+
+function CN:RefreshEditorTags()
+    if not self.tagSummary then return end
+    local fakeEntry = {tags = self.editorTags or {}}
+    local tags = self:TagsForEntry(fakeEntry)
+    for index, tag in ipairs(tags) do
+        local icon = self.tagSummaryIcons[index]
+        if not icon then
+            icon = CreateFrame('Button', nil, self.tagSummary)
+            icon:SetSize(25, 25)
+            icon.texture = icon:CreateTexture(nil, 'ARTWORK')
+            icon.texture:SetAllPoints()
+            icon:SetScript('OnEnter', function(frame)
+                if GameTooltip then
+                    GameTooltip:SetOwner(frame, 'ANCHOR_TOP')
+                    GameTooltip:SetText(frame.tagName or '', 1, .75, .3)
+                    GameTooltip:Show()
+                end
+            end)
+            icon:SetScript('OnLeave', function() if GameTooltip then GameTooltip:Hide() end end)
+            self.tagSummaryIcons[index] = icon
+        end
+        icon:ClearAllPoints()
+        icon:SetPoint('LEFT', self.tagSummary, 'LEFT', (index - 1) * 29, 0)
+        icon.texture:SetTexture(tag.icon)
+        icon.tagName = tag.name
+        icon:Show()
+    end
+    for index = #tags + 1, #self.tagSummaryIcons do self.tagSummaryIcons[index]:Hide() end
 end
 
 function CN:UpdateSoundUI()
@@ -532,6 +571,8 @@ function CN:OpenEditor(name)
     self.nameEdit:SetText(self.currentName)
     self.noteEdit:SetText(entry and entry.note or '')
     self.punkCheck:SetChecked(entry and entry.punk or not entry)
+    self.editorTags = self:CloneTagIds(entry and entry.tags)
+    self:RefreshEditorTags()
     if self.noteScroll then self.noteScroll:SetVerticalScroll(0) end
     self.nameEdit:ClearFocus()
     self.noteEdit:ClearFocus()
@@ -540,7 +581,7 @@ end
 
 function CN:SaveEditor()
     local name = self.nameEdit:GetText()
-    local ok, err = self:Store(name, self.noteEdit:GetText(), self.punkCheck:GetChecked())
+    local ok, err = self:Store(name, self.noteEdit:GetText(), self.punkCheck:GetChecked(), self.editorTags)
     if not ok then self:Print(err); return end
     self.currentName = name
     self:Print(L.NOTE_SAVED)
@@ -555,8 +596,303 @@ function CN:DeleteEditor()
     self.nameEdit:SetText('')
     self.noteEdit:SetText('')
     self.punkCheck:SetChecked(true)
+    self.editorTags = {}
+    self:RefreshEditorTags()
     self:Print(L.NOTE_REMOVED)
     self:RefreshList()
+end
+
+function CN:ShowTagManager()
+    if not self.tagManager then
+        local w = CreateFrame('Frame', 'ElvUICharNotesTagManager', UIParent)
+        w:SetSize(760, 570)
+        w:SetPoint('CENTER', 0, 20)
+        w:SetFrameStrata('FULLSCREEN_DIALOG')
+        w:SetMovable(true)
+        w:EnableMouse(true)
+        w:RegisterForDrag('LeftButton')
+        w:SetScript('OnDragStart', w.StartMoving)
+        w:SetScript('OnDragStop', w.StopMovingOrSizing)
+        backdrop(w)
+        w:Hide()
+        self.tagManager = w
+
+        local title = label(w, L.TAG_MANAGER_TITLE, 16)
+        title:SetPoint('TOPLEFT', 18, -16)
+        local hint = label(w, L.TAG_MANAGER_HINT, 11, 'muted')
+        hint:SetPoint('TOPLEFT', 19, -42)
+        local close = button(w, 'X', 26, 26, function() w:Hide() end)
+        close:SetPoint('TOPRIGHT', -13, -12)
+        separator(w, 18, -65, 724)
+
+        local listBox = CreateFrame('Frame', nil, w)
+        listBox:SetPoint('TOPLEFT', 18, -82)
+        listBox:SetSize(245, 420)
+        backdrop(listBox, .57)
+        local scroll = CreateFrame('ScrollFrame', nil, listBox)
+        scroll:SetPoint('TOPLEFT', 6, -6)
+        scroll:SetPoint('BOTTOMRIGHT', -18, 6)
+        local content = CreateFrame('Frame', nil, scroll)
+        content:SetSize(216, 1)
+        scroll:SetScrollChild(content)
+        self.tagListContent = content
+        self.tagListRows = {}
+        self.refreshTagListScroll = addScrollControl(listBox, scroll, content, 34)
+        local empty = label(listBox, L.TAG_NO_TAGS, 11, 'muted')
+        empty:SetPoint('TOPLEFT', 13, -16)
+        self.tagListEmpty = empty
+
+        local nameLabel = label(w, L.TAG_NAME, 12)
+        nameLabel:SetPoint('TOPLEFT', 286, -84)
+        local nameEdit = edit(w, 300, 28, false)
+        nameEdit:SetPoint('TOPLEFT', 286, -104)
+        nameEdit:SetMaxLetters(40)
+        self.tagNameEdit = nameEdit
+        local newTag = button(w, L.TAG_NEW, 125, 28, function() CN:SelectTag(nil) end)
+        newTag:SetPoint('TOPRIGHT', -18, -104)
+
+        local iconLabel = label(w, L.TAG_ICON, 12)
+        iconLabel:SetPoint('TOPLEFT', 286, -146)
+        local iconSearch = edit(w, 265, 25, false)
+        iconSearch:SetPoint('TOPRIGHT', -18, -138)
+        local iconSearchHint = label(iconSearch, L.TAG_ICON_SEARCH, 10, 'muted')
+        iconSearchHint:SetPoint('LEFT', 8, 0)
+        iconSearch:SetScript('OnTextChanged', function(field)
+            iconSearchHint:SetShown(field:GetText() == '')
+            CN.tagIconPage = 1
+            CN:RefreshTagIconSelection()
+        end)
+        iconSearch:SetScript('OnEditFocusGained', function() iconSearchHint:Hide() end)
+        iconSearch:SetScript('OnEditFocusLost', function(field)
+            iconSearchHint:SetShown(field:GetText() == '')
+        end)
+        self.tagIconSearch = iconSearch
+        self.tagIconButtons = {}
+        self.tagIconPage = 1
+        for index = 1, 40 do
+            local icon = CreateFrame('Button', nil, w)
+            icon:SetSize(38, 38)
+            local column = (index - 1) % 10
+            local row = math.floor((index - 1) / 10)
+            icon:SetPoint('TOPLEFT', 286 + column * 44, -168 - row * 44)
+            icon.texture = icon:CreateTexture(nil, 'ARTWORK')
+            icon.texture:SetPoint('TOPLEFT', 3, -3)
+            icon.texture:SetPoint('BOTTOMRIGHT', -3, 3)
+            icon:SetScript('OnClick', function(frame)
+                if not frame.iconPath then return end
+                CN.tagSelectedIcon = frame.iconPath
+                CN:RefreshTagIconSelection()
+            end)
+            icon:SetScript('OnEnter', function(frame)
+                backdrop(frame, nil, nil, true)
+                if GameTooltip then
+                    GameTooltip:SetOwner(frame, 'ANCHOR_TOP')
+                    GameTooltip:SetText(frame.iconName, 1, .75, .3)
+                    GameTooltip:Show()
+                end
+            end)
+            icon:SetScript('OnLeave', function(frame)
+                backdrop(frame, .88, frame.iconPath == CN.tagSelectedIcon)
+                if GameTooltip then GameTooltip:Hide() end
+            end)
+            self.tagIconButtons[index] = icon
+        end
+
+        local previous = button(w, '<', 36, 24, function()
+            CN.tagIconPage = math.max(1, (CN.tagIconPage or 1) - 1)
+            CN:RefreshTagIconSelection()
+        end)
+        previous:SetPoint('TOPLEFT', 286, -347)
+        local page = label(w, '', 10, 'muted')
+        page:SetPoint('LEFT', previous, 'RIGHT', 10, 0)
+        page:SetWidth(120)
+        page:SetJustifyH('CENTER')
+        self.tagIconPageLabel = page
+        local nextPage = button(w, '>', 36, 24, function()
+            CN.tagIconPage = math.min(CN.tagIconPageCount or 1, (CN.tagIconPage or 1) + 1)
+            CN:RefreshTagIconSelection()
+        end)
+        nextPage:SetPoint('LEFT', page, 'RIGHT', 10, 0)
+
+        local tooltipCheck = check(w)
+        tooltipCheck:SetPoint('TOPLEFT', 286, -384)
+        self.tagTooltipCheck = tooltipCheck
+        local tooltipText = label(w, L.TAG_TOOLTIP, 11)
+        tooltipText:SetPoint('LEFT', tooltipCheck, 'RIGHT', 7, 0)
+        local framesCheck = check(w)
+        framesCheck:SetPoint('TOPLEFT', 286, -413)
+        self.tagFramesCheck = framesCheck
+        local framesText = label(w, L.TAG_FRAMES, 11)
+        framesText:SetPoint('LEFT', framesCheck, 'RIGHT', 7, 0)
+
+        local pointLabel = label(w, L.TAG_POSITION, 11)
+        pointLabel:SetPoint('TOPLEFT', 286, -449)
+        local point = CreateFrame('DropdownButton', nil, w, 'WowStyle2DropdownTemplate')
+        point:SetWidth(190)
+        point:SetPoint('TOPLEFT', 402, -440)
+        point:SetupMenu(function(_, menu)
+            for _, value in ipairs(CN.TAG_FRAME_POINTS) do
+                menu:CreateRadio(L[CN.TAG_FRAME_POINT_KEYS[value]],
+                    function(candidate) return CN.tagFramePoint == candidate end,
+                    function(candidate) CN.tagFramePoint = candidate end, value)
+            end
+        end)
+        self.tagPointDropdown = point
+
+        local save = button(w, L.TAG_SAVE, 130, 30, function() CN:SaveTagEditor() end, true)
+        save:SetPoint('BOTTOMLEFT', 286, 20)
+        local delete = button(w, L.TAG_DELETE, 165, 30, function() CN:DeleteTagEditor() end)
+        delete:SetPoint('LEFT', save, 'RIGHT', 8, 0)
+        self.tagDeleteButton = delete
+        local done = button(w, L.TAG_DONE, 105, 30, function()
+            CN:RefreshEditorTags()
+            w:Hide()
+        end)
+        done:SetPoint('BOTTOMRIGHT', -18, 20)
+    end
+    if self.tagSelectedId and self.db.tags[self.tagSelectedId] then self:SelectTag(self.tagSelectedId)
+    else self:SelectTag(nil) end
+    self.tagManager:Show()
+    self.tagManager:Raise()
+end
+
+function CN:RefreshTagIconSelection()
+    local query = self.tagIconSearch and self.tagIconSearch:GetText() or ''
+    local catalog = self:FilterBlizzardIcons(query)
+    local pageSize = 40
+    self.tagIconPageCount = math.max(1, math.ceil(#catalog / pageSize))
+    self.tagIconPage = math.min(self.tagIconPageCount, math.max(1, self.tagIconPage or 1))
+    local first = (self.tagIconPage - 1) * pageSize
+    for index, icon in ipairs(self.tagIconButtons or {}) do
+        local item = catalog[first + index]
+        if item then
+            icon.iconPath, icon.iconName = item, self:GetBlizzardIconName(item)
+            icon.texture:SetTexture(item)
+            backdrop(icon, .88, item == self.tagSelectedIcon)
+            icon:Show()
+        else
+            icon.iconPath, icon.iconName = nil, nil
+            icon:Hide()
+        end
+    end
+    if self.tagIconPageLabel then
+        self.tagIconPageLabel:SetText(('%d / %d'):format(self.tagIconPage, self.tagIconPageCount))
+    end
+end
+
+function CN:SelectTag(id)
+    local tag = id and self.db.tags[id]
+    self.tagSelectedId = tag and id or nil
+    self.pendingTagDeleteId = nil
+    if self.tagDeleteButton then self.tagDeleteButton:SetText(L.TAG_DELETE) end
+    self.tagNameEdit:SetText(tag and tag.name or '')
+    self.tagSelectedIcon = tag and tag.icon or self.BLIZZARD_ICONS[1][1]
+    if self.tagIconSearch then self.tagIconSearch:SetText('') end
+    local catalog = self:GetBlizzardIconCatalog()
+    for index, item in ipairs(catalog) do
+        if item == self.tagSelectedIcon then self.tagIconPage = math.ceil(index / 40); break end
+    end
+    self.tagTooltipCheck:SetChecked(not tag or tag.showTooltip)
+    self.tagFramesCheck:SetChecked(tag and tag.showFrames or false)
+    self.tagFramePoint = tag and tag.framePoint or 'TOPRIGHT'
+    if self.tagPointDropdown then self.tagPointDropdown:Update() end
+    self:RefreshTagIconSelection()
+    self:RefreshTagManager(self.tagSelectedId, true)
+end
+
+local function tagAssigned(tags, id)
+    for _, value in ipairs(tags or {}) do if value == id then return true end end
+    return false
+end
+
+function CN:ToggleEditorTag(id, enabled)
+    local nextTags = {}
+    for _, value in ipairs(self.editorTags or {}) do if value ~= id then nextTags[#nextTags + 1] = value end end
+    if enabled then
+        if #nextTags >= self.MAX_TAGS_PER_ENTRY then
+            self:Print(L.TAG_LIMIT:format(self.MAX_TAGS_PER_ENTRY))
+            return false
+        end
+        nextTags[#nextTags + 1] = id
+    end
+    table.sort(nextTags)
+    self.editorTags = nextTags
+    self:RefreshEditorTags()
+    return true
+end
+
+function CN:RefreshTagManager(selectedId, keepEditor)
+    if not self.tagListContent then return end
+    local tags = self:TagDefinitions()
+    self.tagListContent:SetHeight(math.max(1, #tags * 34))
+    self.tagListEmpty:SetShown(#tags == 0)
+    for index, tag in ipairs(tags) do
+        local row = self.tagListRows[index]
+        if not row then
+            row = CreateFrame('Button', nil, self.tagListContent)
+            row:SetSize(216, 32)
+            row.check = check(row)
+            row.check:SetPoint('LEFT', 5, 0)
+            row.icon = row:CreateTexture(nil, 'ARTWORK')
+            row.icon:SetSize(24, 24)
+            row.icon:SetPoint('LEFT', 30, 0)
+            row.text = row:CreateFontString(nil, 'OVERLAY', 'GameFontNormalSmall')
+            row.text:SetPoint('LEFT', 61, 0)
+            row.text:SetWidth(148)
+            row.text:SetJustifyH('LEFT')
+            row:SetScript('OnEnter', function(frame) backdrop(frame, nil, nil, true) end)
+            row:SetScript('OnLeave', function(frame) backdrop(frame, .75, frame.tagId == CN.tagSelectedId) end)
+            self.tagListRows[index] = row
+        end
+        local id = tag.id
+        row:ClearAllPoints()
+        row:SetPoint('TOPLEFT', 0, -(index - 1) * 34)
+        row.tagId = id
+        row.icon:SetTexture(tag.icon)
+        row.text:SetText(tag.name)
+        row.check:SetChecked(tagAssigned(self.editorTags, id))
+        row.check:SetScript('OnClick', function(box)
+            if not CN:ToggleEditorTag(id, not not box:GetChecked()) then box:SetChecked(false) end
+        end)
+        row:SetScript('OnClick', function() CN:SelectTag(id) end)
+        backdrop(row, .75, id == selectedId)
+        row:Show()
+    end
+    for index = #tags + 1, #self.tagListRows do self.tagListRows[index]:Hide() end
+    if self.refreshTagListScroll then self.refreshTagListScroll() end
+    if selectedId and not keepEditor and self.db.tags[selectedId] then self:SelectTag(selectedId) end
+end
+
+function CN:SaveTagEditor()
+    local id, err
+    if self.tagSelectedId then
+        local ok
+        ok, err = self:UpdateTag(self.tagSelectedId, self.tagNameEdit:GetText(), self.tagSelectedIcon,
+            self.tagTooltipCheck:GetChecked(), self.tagFramesCheck:GetChecked(), self.tagFramePoint)
+        if ok then id = self.tagSelectedId end
+    else
+        id, err = self:CreateTag(self.tagNameEdit:GetText(), self.tagSelectedIcon,
+            self.tagTooltipCheck:GetChecked(), self.tagFramesCheck:GetChecked(), self.tagFramePoint)
+        if id then self:ToggleEditorTag(id, true) end
+    end
+    if not id then self:Print(err); return end
+    self:SelectTag(id)
+    self:RefreshHighlights()
+end
+
+function CN:DeleteTagEditor()
+    local id = self.tagSelectedId
+    if not id then self:Print(L.TAG_SELECT_FIRST); return end
+    if self.pendingTagDeleteId ~= id then
+        self.pendingTagDeleteId = id
+        self.tagDeleteButton:SetText(L.TAG_DELETE_CONFIRM)
+        return
+    end
+    self:ToggleEditorTag(id, false)
+    self:DeleteTag(id)
+    self:SelectTag(nil)
+    self:RefreshTagManager(nil, true)
+    self:RefreshHighlights()
 end
 
 function CN:ShowAlert(name, note)

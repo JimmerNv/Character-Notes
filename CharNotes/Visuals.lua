@@ -1,6 +1,8 @@
 local _, CN = ...
 
 local frameBorders = setmetatable({}, {__mode = 'k'})
+local frameTagIcons = setmetatable({}, {__mode = 'k'})
+local frameTagParents = setmetatable({}, {__mode = 'k'})
 local tooltipKeys = setmetatable({}, {__mode = 'k'})
 
 local function canUseFrame(frame)
@@ -17,6 +19,8 @@ local function frameUnit(frame)
     local unit = frame.unit
     if isUnitToken(unit) then return unit end
     unit = frame.unitID
+    if isUnitToken(unit) then return unit end
+    unit = frame.__unit
     if isUnitToken(unit) then return unit end
     if frame.GetAttribute then
         local ok, attribute = pcall(frame.GetAttribute, frame, 'unit')
@@ -56,18 +60,103 @@ local function makeBorder(parent)
     return t
 end
 
-local function refreshUnitFrame(frame, unit)
+local function portraitForFrame(frame)
+    local portrait = frame.Portrait or frame.portrait or frame.PortraitTexture
+    if portrait then return portrait end
+    if frame.GetName then
+        local ok, name = pcall(frame.GetName, frame)
+        if ok and type(name) == 'string' then return _G[name .. 'Portrait'] end
+    end
+end
+
+local function tagIconParent(frame)
+    -- ElvUI renders its health/power elements above textures created directly
+    -- on the unit frame. Its RaisedElementParent is the intended overlay layer.
+    local raised = frame.RaisedElementParent
+    if canUseFrame(raised) and raised.CreateTexture then return raised end
+
+    -- Blizzard's modern unit frames also contain several child-frame layers.
+    -- An anonymous high-level child keeps our textures above that artwork and
+    -- follows the unit frame without changing its secure attributes.
+    local overlay = frameTagParents[frame]
+    if overlay then return overlay end
+    if type(CreateFrame) ~= 'function' then return frame end
+    overlay = CreateFrame('Frame', nil, frame)
+    overlay:SetAllPoints(frame)
+    overlay:EnableMouse(false)
+    if frame.GetFrameLevel and overlay.SetFrameLevel then
+        local ok, level = pcall(frame.GetFrameLevel, frame)
+        if ok and not CN:IsSecret(level) and type(level) == 'number' then
+            overlay:SetFrameLevel(level + 100)
+        end
+    end
+    frameTagParents[frame] = overlay
+    return overlay
+end
+
+local function refreshTagIcons(frame, entry, enabled)
+    local tags = enabled and CN:TagsForEntry(entry, 'frames') or {}
+    local icons = frameTagIcons[frame]
+    local locked = InCombatLockdown and InCombatLockdown()
+    if #tags > 0 and not icons then
+        if locked then return end
+        local parent = tagIconParent(frame)
+        if not parent.CreateTexture then return end
+        icons = {}
+        icons.parent = parent
+        frameTagIcons[frame] = icons
+    end
+    if not icons then return end
+    local pointCounts = {}
+    for index, tag in ipairs(tags) do
+        local icon = icons[index]
+        if not icon then
+            if locked then break end
+            icon = icons.parent:CreateTexture(nil, 'OVERLAY', nil, 7)
+            icon:SetSize(18, 18)
+            icons[index] = icon
+        end
+        local point = tag.framePoint or 'TOPRIGHT'
+        pointCounts[point] = (pointCounts[point] or 0) + 1
+        local offset = (pointCounts[point] - 1) * 19
+        local anchor = frame
+        if not locked then
+            icon:ClearAllPoints()
+            if point == 'PORTRAIT' then
+                anchor = portraitForFrame(frame) or frame
+                icon:SetPoint('CENTER', anchor, 'CENTER', offset, 0)
+            elseif point == 'TOPLEFT' then
+                icon:SetPoint('TOPLEFT', anchor, 'TOPLEFT', offset, 0)
+            elseif point == 'BOTTOMLEFT' then
+                icon:SetPoint('BOTTOMLEFT', anchor, 'BOTTOMLEFT', offset, 0)
+            elseif point == 'BOTTOMRIGHT' then
+                icon:SetPoint('BOTTOMRIGHT', anchor, 'BOTTOMRIGHT', -offset, 0)
+            else
+                icon:SetPoint('TOPRIGHT', anchor, 'TOPRIGHT', -offset, 0)
+            end
+        end
+        icon:SetTexture(tag.icon)
+        icon:Show()
+    end
+    for index = #tags + 1, #icons do icons[index]:Hide() end
+end
+
+local function refreshUnitFrame(frame, unit, showTags)
     if not canUseFrame(frame) then return end
     local visible = frame.IsVisible or frame.IsShown
     if not visible then return end
     local ok, shown = pcall(visible, frame)
     if not ok or CN:IsSecret(shown) or not shown then return end
-    local shouldShow = CN.db.config.border and CN:IsPunkUnit(unit or frameUnit(frame))
+    local resolvedUnit = unit or frameUnit(frame)
+    local key = CN:FromUnit(resolvedUnit)
+    local entry = key and CN.db.entries[key]
+    local shouldShow = CN.db.config.border and entry and not entry.deleted and entry.punk or false
     local overlay = frameBorders[frame]
     if shouldShow and not overlay then overlay = makeBorder(frame) end
     if overlay then
         for _, tex in ipairs(overlay) do tex:SetShown(shouldShow) end
     end
+    refreshTagIcons(frame, entry, showTags ~= false and entry and not entry.deleted)
 end
 
 function CN:IsPunkUnit(unit)
@@ -83,6 +172,7 @@ local function refreshCompactGroup(group)
 end
 
 local function refreshBlizzardFrames()
+    refreshUnitFrame(_G.PlayerFrame, 'player')
     refreshUnitFrame(_G.TargetFrame, 'target')
     refreshUnitFrame(_G.FocusFrame, 'focus')
     refreshUnitFrame(_G.TargetFrameToT, 'targettarget')
@@ -107,8 +197,16 @@ function CN:RefreshHighlights()
     refreshBlizzardFrames()
     local UF = elvUIUnitFrames()
     if UF and type(UF.units) == 'table' then
-        for _, frame in pairs(UF.units) do refreshUnitFrame(frame) end
+        -- ElvUI stores these frames by their literal unit token. Preserve that
+        -- token because current oUF frames expose it primarily as __unit and it
+        -- may otherwise be unavailable on protected frames.
+        for unit, frame in pairs(UF.units) do
+            refreshUnitFrame(frame, isUnitToken(unit) and unit or nil)
+        end
     end
+    -- Keep explicit fallbacks for ElvUI versions which do not publish units or
+    -- populate the table after Character Notes has initialized.
+    refreshUnitFrame((UF and UF.player) or _G.ElvUF_Player, 'player')
     refreshUnitFrame(_G.ElvUF_Target, 'target')
     refreshUnitFrame(_G.ElvUF_Focus, 'focus')
     refreshUnitFrame(_G.ElvUF_TargetTarget, 'targettarget')
@@ -121,7 +219,7 @@ function CN:RefreshHighlights()
                     local frame = plate.UnitFrame
                     unit = canUseFrame(frame) and frameUnit(frame) or nil
                 end
-                refreshUnitFrame(plate, unit)
+                refreshUnitFrame(plate, unit, false)
             end
         end
     end
@@ -211,6 +309,14 @@ function CN:TooltipUnit(tip, knownGroupUnit)
     if tooltipKeys[tip] == key then return end
     tooltipKeys[tip] = key
     tip:AddLine('|cffff9855CharNotes' .. (e.punk and '  [PUNK]' or '') .. '|r')
+    local tooltipTags = self:TagsForEntry(e, 'tooltip')
+    if #tooltipTags > 0 then
+        local parts = {}
+        for _, tag in ipairs(tooltipTags) do
+            parts[#parts + 1] = '|T' .. tag.icon .. ':16:16|t |cffffc56b' .. tag.name .. '|r'
+        end
+        tip:AddLine(table.concat(parts, '   '), 1, 1, 1, true)
+    end
     if e.note and e.note ~= '' then
         tip:AddLine('|cffffffff' .. e.note:sub(1, 420):gsub('|', '||') .. '|r', 1, 1, 1, true)
     end

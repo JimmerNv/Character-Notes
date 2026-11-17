@@ -31,6 +31,8 @@ local function optionsTable()
                 name = L.ELVUI_OVERVIEW },
             open = { type = 'execute', name = L.OPEN_NOTES, order = 2,
                 func = function() CN:ShowWindow() end },
+            tags = { type = 'execute', name = L.TAG_MANAGER_TITLE, order = 2.2,
+                func = function() CN:ShowWindow(); CN:ShowTagManager() end },
             language = { type = 'select', name = L.LANGUAGE, order = 2.5,
                 desc = L.LANGUAGE_RELOAD, values = languages, sorting = CN.LANGUAGE_ORDER,
                 get = function() return CN.db.config.language end,

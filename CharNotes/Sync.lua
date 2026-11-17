@@ -2,8 +2,8 @@ local _, CN = ...
 local L = CN.L
 local PREFIX = 'CNForever2'
 local CHUNK = 175
-local MAX_PARTS = 35
-local MAX_EXPORT_LINE = 4000
+local MAX_PARTS = 90
+local MAX_EXPORT_LINE = 16000
 
 local function hex(s)
     return (s:gsub('.', function(c) return string.format('%02X', string.byte(c)) end))
@@ -14,18 +14,65 @@ local function unhex(s)
     return (s:gsub('..', function(c) return string.char(tonumber(c, 16)) end))
 end
 
-local function encode(entry)
+local function encodeTags(entry)
+    local records = {}
+    for _, id in ipairs(entry.tags or {}) do
+        local tag = CN.db.tags[id]
+        if tag then
+            records[#records + 1] = table.concat({id, hex(tag.name), hex(tostring(tag.icon)),
+                tag.showTooltip ~= false and '1' or '0', tag.showFrames and '1' or '0',
+                tag.framePoint or 'TOPRIGHT', tostring(tag.updated or 0), hex(tag.writer or '')}, ',')
+        end
+    end
+    return 'T3:' .. table.concat(records, ';')
+end
+
+local function encode(entry, includeTags)
     return hex(table.concat({
         tostring(entry.name or ''), tostring(entry.updated or 0), tostring(entry.writer or ''),
-        entry.punk and '1' or '0', entry.deleted and '1' or '0', tostring(entry.note or ''),
+        entry.punk and '1' or '0', entry.deleted and '1' or '0',
+        includeTags == false and 'T3:' or encodeTags(entry), tostring(entry.note or ''),
     }, '\t'))
+end
+
+local function decodeTags(payload)
+    if type(payload) ~= 'string' or payload:sub(1, 3) ~= 'T3:' then return nil end
+    local ids, definitions, seen = {}, {}, {}
+    local body = payload:sub(4)
+    if body == '' then return ids, definitions end
+    for record in body:gmatch('[^;]+') do
+        local id, nameHex, iconHex, tooltip, frames, point, stamp, writerHex =
+            record:match('^([%w_.%-]+),([0-9A-F]*),([0-9A-F]*),([01]),([01]),([A-Z]+),(%d+),([0-9A-F]*)$')
+        local name, iconText, writer = unhex(nameHex), unhex(iconHex), unhex(writerHex)
+        local icon = iconText and iconText:match('^%d+$') and tonumber(iconText) or iconText
+        local updated = tonumber(stamp)
+        if not id or #id > 80 or not name or #name > 40 or name == '' or name:find('[\r\n\t|]') or
+                not icon or not CN:IsBlizzardTagIcon(icon) or not writer or #writer > 80 or
+                not updated or updated < 0 or updated > time() + 31536000 or
+                not CN.TAG_FRAME_POINT_KEYS[point] or seen[id] then return nil end
+        seen[id] = true
+        ids[#ids + 1] = id
+        definitions[#definitions + 1] = {id = id, name = name, icon = icon,
+            showTooltip = tooltip == '1', showFrames = frames == '1', framePoint = point,
+            updated = updated, writer = writer}
+        if #ids > CN.MAX_TAGS_PER_ENTRY then return nil end
+    end
+    return ids, definitions
 end
 
 local function decode(data)
     local raw = unhex(data)
     if not raw then return nil end
-    local name, stamp, writer, punk, deleted, note =
-        raw:match('^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$')
+    local name, stamp, writer, punk, deleted, tagPayload, note =
+        raw:match('^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(T3:[^\t]*)\t(.*)$')
+    local tagIds, tagDefinitions
+    if tagPayload then
+        tagIds, tagDefinitions = decodeTags(tagPayload)
+    end
+    if not tagIds then
+        name, stamp, writer, punk, deleted, note =
+            raw:match('^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$')
+    end
     if not name then return nil end
     local num = tonumber(stamp)
     if not num or num < 0 or num > time() + 31536000 or num ~= math.floor(num) then return nil end
@@ -36,15 +83,20 @@ local function decode(data)
     local key, normalized = CN:Normalize(name)
     if not key then return nil end
     return key, {name = normalized, updated = num, writer = writer, punk = punk == '1',
-        deleted = deleted == '1', note = note}
+        deleted = deleted == '1', note = note, tags = tagIds}, tagDefinitions
 end
 
-function CN:MergeEntry(key, record)
+function CN:MergeEntry(key, record, tagDefinitions)
     if type(record) ~= 'table' or not key then return false end
     local old = self.db.entries[key]
     local replace = not old or record.updated > (tonumber(old.updated) or 0) or
         (record.updated == (tonumber(old.updated) or 0) and record.writer > (old.writer or ''))
     if replace then
+        if record.tags == nil then record.tags = old and self:CloneTagIds(old.tags) or {}
+        else
+            self:ImportTagDefinitions(tagDefinitions)
+            record.tags = self:NormalizeTagIds(record.tags)
+        end
         self.db.entries[key] = record
         self:Changed(key)
         return true
@@ -53,7 +105,7 @@ function CN:MergeEntry(key, record)
 end
 
 function CN:ExportData()
-    local lines = {'CN2'}
+    local lines = {'CN3'}
     local keys = {}
     for key, e in pairs(self.db.entries) do
         if type(e) == 'table' then keys[#keys + 1] = key end
@@ -66,17 +118,17 @@ end
 function CN:ImportData(data)
     if type(data) ~= 'string' or #data > 8000000 then return nil, L.INVALID_EXPORT end
     data = data:gsub('\r\n', '\n')
-    if data:sub(1, 4) ~= 'CN2\n' and data ~= 'CN2' then
+    if data:sub(1, 4) ~= 'CN2\n' and data ~= 'CN2' and data:sub(1, 4) ~= 'CN3\n' and data ~= 'CN3' then
         return nil, L.INVALID_EXPORT_FORMAT
     end
     local imported, checked = 0, 0
     for line in (data .. '\n'):gmatch('(.-)\n') do
-        if line ~= '' and line ~= 'CN2' then
+        if line ~= '' and line ~= 'CN2' and line ~= 'CN3' then
             checked = checked + 1
             if checked > 8000 or #line > MAX_EXPORT_LINE then return nil, L.IMPORT_LIMIT end
-            local key, record = decode(line)
+            local key, record, tagDefinitions = decode(line)
             if not key then return nil, L.IMPORT_INVALID_RECORD:format(checked) end
-            if self:MergeEntry(key, record) then imported = imported + 1 end
+            if self:MergeEntry(key, record, tagDefinitions) then imported = imported + 1 end
         end
     end
     return imported
@@ -106,7 +158,9 @@ local function dispatch(message, channel, target)
 end
 
 function CN:QueueRecord(e, kind, target)
-    local payload = encode(e)
+    -- Guild sharing intentionally sends no local tag definitions or assignments.
+    -- Trusted sync and explicit export/import retain the complete account data.
+    local payload = encode(e, kind ~= 'G')
     local count = math.ceil(#payload / CHUNK)
     if count > MAX_PARTS then return false, L.SYNC_PROTOCOL_LIMIT end
     self.pendingOut = self.pendingOut or {}
@@ -220,13 +274,14 @@ function CN:ReceivePacket(message, channel, sender)
     if cur.received < cur.count then return end
     self.receiving[identifier] = nil
     local full = table.concat(cur.parts)
-    if #full > 6500 then return end
-    local entryKey, entry = decode(full)
+    if #full > MAX_EXPORT_LINE then return end
+    local entryKey, entry, tagDefinitions = decode(full)
     if not entryKey then return end
     if kind == 'S' then
-        if self:MergeEntry(entryKey, entry) then self:Print(L.SYNC_UPDATED:format(entry.name)) end
+        if self:MergeEntry(entryKey, entry, tagDefinitions) then self:Print(L.SYNC_UPDATED:format(entry.name)) end
     else
         if entry.deleted then return end -- No tombstones via guild shares.
+        entry.tags = entry.tags or {}
         self.receivedGuildThrottle = self.receivedGuildThrottle or {}
         local limit = self.receivedGuildThrottle[key] or {time = time(), count = 0}
         if time() - limit.time > 60 then limit.time, limit.count = time(), 0 end
@@ -239,7 +294,8 @@ function CN:ReceivePacket(message, channel, sender)
             if inbox[i].sender == senderLabel and inbox[i].key == entryKey then table.remove(inbox, i) end
         end
         if #inbox >= 50 then table.remove(inbox, 1) end
-        inbox[#inbox + 1] = {sender = senderLabel, key = entryKey, entry = entry, received = time()}
+        inbox[#inbox + 1] = {sender = senderLabel, key = entryKey, entry = entry,
+            tagDefinitions = tagDefinitions, received = time()}
         self:Print(L.GUILD_RECEIVED:format(senderLabel, entry.name))
         if self.RefreshInbox then self:RefreshInbox() end
     end
@@ -254,6 +310,8 @@ function CN:AcceptInbox(index)
     -- local record has a higher timestamp. The edit is local and becomes a new revision.
     local old = self.db.entries[item.key]
     local e = item.entry
+    self:ImportTagDefinitions(item.tagDefinitions)
+    e.tags = self:NormalizeTagIds(e.tags)
     e.updated = math.max(time(), (old and tonumber(old.updated) or 0) + 1)
     e.writer = self.db.node
     self.db.entries[item.key] = e

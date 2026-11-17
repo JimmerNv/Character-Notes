@@ -2,7 +2,7 @@ local ADDON, CN = ...
 local L = CN.L
 _G.ElvUI_CharNotes = CN
 CN.ADDON = ADDON
-CN.VERSION = '1.5.1-beta'
+CN.VERSION = '1.6.0-beta'
 CN.COLOR = '|cffff9855'
 CN.RESET = '|r'
 CN.db = nil
@@ -86,7 +86,9 @@ end
 function CN:EnsureDB()
     if type(ElvUICharNotesDB) ~= 'table' then ElvUICharNotesDB = {} end
     local d = ElvUICharNotesDB
+    self.db = d
     if type(d.entries) ~= 'table' then d.entries = {} end
+    if type(d.tags) ~= 'table' then d.tags = {} end
     if type(d.trusted) ~= 'table' then d.trusted = {} end
     if type(d.inbox) ~= 'table' then d.inbox = {} end
     if type(d.config) ~= 'table' then d.config = {} end
@@ -107,14 +109,16 @@ function CN:EnsureDB()
     if type(d.node) ~= 'string' or d.node == '' then
         d.node = tostring(time()) .. '-' .. tostring(math.random(10000, 99999))
     end
+    self:SanitizeTagDefinitions()
     -- Migrate an unfinished pre-release that used the accidental "pink" name.
     for _, e in pairs(d.entries) do
         if type(e) == 'table' then
             if e.punk == nil then e.punk = (e.pink == true) end
             e.pink = nil
+            e.tags = self:NormalizeTagIds(e.tags)
         end
     end
-    d.schema = 2
+    d.schema = 3
     return d
 end
 
@@ -125,15 +129,17 @@ function CN:Get(name)
     return type(e) == 'table' and not e.deleted and e or nil
 end
 
-function CN:Store(name, note, punk)
+function CN:Store(name, note, punk, tags)
     local key, label = self:Normalize(name)
     if not key then return false, L.INVALID_CHARACTER end
     if type(note) ~= 'string' then note = '' end
     note = trim(note)
     if #note > 1200 then return false, L.NOTE_TOO_LONG end
     local old = self.db.entries[key]
+    if tags == nil and old then tags = old.tags end
     self.db.entries[key] = {
         name = label, note = note, punk = not not punk,
+        tags = self:NormalizeTagIds(tags),
         updated = math.max(time(), (old and tonumber(old.updated) or 0) + 1),
         writer = self.db.node, deleted = false,
     }
@@ -157,7 +163,7 @@ end
 function CN:TogglePunk(name)
     local old = self:Get(name)
     local newValue = not (old and old.punk)
-    local ok, err = self:Store(name, old and old.note or '', newValue)
+    local ok, err = self:Store(name, old and old.note or '', newValue, old and old.tags)
     if ok then self:Print((newValue and L.PUNK_MARKED or L.PUNK_UNMARKED):format(old and old.name or name)) end
     return ok, err
 end
@@ -173,8 +179,14 @@ function CN:EntryList(query)
     local items = {}
     query = (query or ''):lower()
     for key, e in pairs(self.db.entries) do
+        local tagMatch = false
+        if query ~= '' and type(e) == 'table' then
+            for _, tag in ipairs(self:TagsForEntry(e)) do
+                if tag.name:lower():find(query, 1, true) then tagMatch = true; break end
+            end
+        end
         if type(e) == 'table' and not e.deleted and
-            (query == '' or key:find(query, 1, true) or (e.note or ''):lower():find(query, 1, true)) then
+            (query == '' or key:find(query, 1, true) or (e.note or ''):lower():find(query, 1, true) or tagMatch) then
             items[#items + 1] = e
         end
     end
@@ -357,6 +369,7 @@ function CN:Slash(text)
     if cmd == 'help' then self:Help()
     elseif cmd == 'status' or cmd == 'diag' then self:Status()
     elseif cmd == 'options' then self:ShowOptions()
+    elseif cmd == 'tags' then self:ShowWindow(); self:ShowTagManager()
     elseif cmd == 'language' then self:SetLanguage(rest:lower())
     elseif cmd == 'add' or cmd == 'edit' then
         if rest ~= '' then self:OpenEditor(rest) else self:Print(L.ENTER_CHARACTER) end
