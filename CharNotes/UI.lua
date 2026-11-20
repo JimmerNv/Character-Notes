@@ -176,6 +176,24 @@ local function separator(parent, x, y, width)
     return line
 end
 
+function CN:ApplyLanguageTheme()
+    if not self.headerBlue or not self.headerYellow then return end
+    local russian = self.locale == 'ruRU'
+    if russian then
+        self.headerBlue:Show()
+        self.headerYellow:Show()
+        self.headerTitle:SetTextColor(1, 1, 1)
+        self.headerSubtitle:SetText('Slava Ukraini!  •  Слава Україні!')
+        self.headerSubtitle:SetTextColor(.02, .13, .25)
+    else
+        self.headerBlue:Hide()
+        self.headerYellow:Hide()
+        self.headerTitle:SetTextColor(.97, .82, .45)
+        self.headerSubtitle:SetText(L.SUBTITLE)
+        self.headerSubtitle:SetTextColor(.61, .65, .72)
+    end
+end
+
 function CN:InitializeUI()
     if self.window then return end
     local w = CreateFrame('Frame', 'ElvUICharNotesWindow', UIParent)
@@ -191,15 +209,35 @@ function CN:InitializeUI()
     w:Hide()
     self.window = w
 
+    local headerBlue = w:CreateTexture(nil, 'BACKGROUND', nil, 1)
+    headerBlue:SetTexture(WHITE)
+    headerBlue:SetVertexColor(0, .341, .718, 1)
+    headerBlue:SetPoint('TOPLEFT', w, 'TOPLEFT', 1, -1)
+    headerBlue:SetPoint('TOPRIGHT', w, 'TOPRIGHT', -1, -1)
+    headerBlue:SetHeight(30)
+    headerBlue:Hide()
+    self.headerBlue = headerBlue
+    local headerYellow = w:CreateTexture(nil, 'BACKGROUND', nil, 1)
+    headerYellow:SetTexture(WHITE)
+    headerYellow:SetVertexColor(1, .843, 0, 1)
+    headerYellow:SetPoint('TOPLEFT', w, 'TOPLEFT', 1, -31)
+    headerYellow:SetPoint('TOPRIGHT', w, 'TOPRIGHT', -1, -31)
+    headerYellow:SetHeight(30)
+    headerYellow:Hide()
+    self.headerYellow = headerYellow
+
     local title = label(w, 'CharNotes  ' .. ORANGE .. '[PUNK]|r', 16)
     title:SetPoint('TOPLEFT', 20, -16)
+    self.headerTitle = title
     local subtitle = label(w, L.SUBTITLE, 11, 'muted')
     subtitle:SetPoint('TOPLEFT', 21, -40)
+    self.headerSubtitle = subtitle
     local close = button(w, 'X', 26, 26, function() w:Hide() end)
     close:SetPoint('TOPRIGHT', -13, -12)
     local options = button(w, L.OPTIONS, 89, 26, function() CN:ShowOptions() end)
     options:SetPoint('RIGHT', close, 'LEFT', -9, 0)
     separator(w, 19, -62, 762)
+    self:ApplyLanguageTheme()
 
     local listHeading = label(w, L.PLAYERS_HEADER, 12)
     listHeading:SetPoint('TOPLEFT', 21, -79)
@@ -426,6 +464,7 @@ end
 
 function CN:UpdateLanguageUI()
     if self.languageDropdown then self.languageDropdown:Update() end
+    self:ApplyLanguageTheme()
 end
 
 local function optionCheck(panel, text, y, onClick)

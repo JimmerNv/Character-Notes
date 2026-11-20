@@ -1,6 +1,7 @@
 local _, CN = ...
 
--- All player-facing CharNotes text. Other WoW client languages use English.
+-- All player-facing CharNotes text. Locale modules add their translations
+-- through CN:RegisterLocale; missing entries always fall back to English.
 local strings = {
     SUBTITLE = { enUS = "Account-wide character notes", deDE = "Accountweite Spielernotizen" },
     OPTIONS = { enUS = "Options", deDE = "Optionen" },
@@ -8,9 +9,21 @@ local strings = {
     LANGUAGE_CLIENT = { enUS = "WoW Client", deDE = "WoW-Client" },
     LANGUAGE_ENGLISH = { enUS = "English", deDE = "English" },
     LANGUAGE_GERMAN = { enUS = "Deutsch", deDE = "Deutsch" },
+    LANGUAGE_FRENCH = { enUS = "Français", deDE = "Français" },
+    LANGUAGE_SPANISH = { enUS = "Español", deDE = "Español" },
+    LANGUAGE_ITALIAN = { enUS = "Italiano", deDE = "Italiano" },
+    LANGUAGE_PORTUGUESE = { enUS = "Português", deDE = "Português" },
+    LANGUAGE_POLISH = { enUS = "Polski", deDE = "Polski" },
+    LANGUAGE_UKRAINIAN = { enUS = "Українська", deDE = "Українська" },
+    LANGUAGE_ROMANIAN = { enUS = "Română", deDE = "Română" },
+    LANGUAGE_BULGARIAN = { enUS = "Български", deDE = "Български" },
+    LANGUAGE_HUNGARIAN = { enUS = "Magyar", deDE = "Magyar" },
+    LANGUAGE_TURKISH = { enUS = "Türkçe", deDE = "Türkçe" },
+    LANGUAGE_RUSSIAN = { enUS = "Русский", deDE = "Русский" },
+    LANGUAGE_KOREAN = { enUS = "한국어", deDE = "한국어" },
     LANGUAGE_RELOAD = { enUS = "Changing the language reloads the interface.", deDE = "Ein Sprachwechsel lädt die Oberfläche neu." },
     LANGUAGE_RELOAD_MANUAL = { enUS = "Language saved. Type /reload to apply it.", deDE = "Sprache gespeichert. Gib /reload ein, um sie zu übernehmen." },
-    LANGUAGE_USAGE = { enUS = "Use /cn language en, /cn language de, or /cn language client.", deDE = "Nutze /cn language en, /cn language de oder /cn language client." },
+    LANGUAGE_USAGE = { enUS = "Use /cn lang <client|de|en|fr|es|it|pt|pl|uk|ro|bg|hu|tr|ru|ko>. /cn language de also works.", deDE = "Nutze /cn lang <client|de|en|fr|es|it|pt|pl|uk|ro|bg|hu|tr|ru|ko>. /cn language de funktioniert ebenfalls." },
     PLAYERS_HEADER = { enUS = "PLAYERS", deDE = "SPIELER" },
     SEARCH_HINT = { enUS = "Search names or notes", deDE = "Name oder Notiz suchen" },
     EMPTY_LIST = { enUS = "No notes yet.", deDE = "Noch keine Notizen vorhanden." },
@@ -120,11 +133,14 @@ local strings = {
     GROUP_WARNING = { enUS = "Warning: |cffff9855[PUNK] %s|r is in your group! %s", deDE = "Warnung: |cffff9855[PUNK] %s|r ist in deiner Gruppe! %s" },
     GROUP_REASON = { enUS = "Note: %s", deDE = "Notiz: %s" },
     MARKED_PLAYER = { enUS = "Marked player.", deDE = "Markierter Spieler." },
-    HELP_MAIN = { enUS = "/cn - notes; /cn add Name-Realm; /cn target; /cn punk Name-Realm; /cn ignore Name-Realm", deDE = "/cn - Notizliste; /cn add Name-Realm; /cn target; /cn punk Name-Realm; /cn ignore Name-Realm" },
-    HELP_OPTIONS = { enUS = "/cn options - settings; /cn tags - manage and assign tags", deDE = "/cn options - Einstellungen; /cn tags - Tags verwalten und zuweisen" },
-    HELP_NOTE = { enUS = "/cn note Name-Realm | Text; /cn sound next|test|on|off; /cn guild Name-Realm", deDE = "/cn note Name-Realm | Text; /cn sound next|test|on|off; /cn guild Name-Realm" },
-    HELP_SYNC = { enUS = "/cn inbox; /cn trust Name-Realm; /cn untrust Name-Realm; /cn peers; /cn sync Name-Realm", deDE = "/cn inbox; /cn trust Name-Realm; /cn untrust Name-Realm; /cn peers; /cn sync Name-Realm" },
-    HELP_MISC = { enUS = "/cn export; /cn import; /cn menus on|off; /cn status; /cn help", deDE = "/cn export; /cn import; /cn menus on|off; /cn status; /cn help" },
+    HELP_HEADER = { enUS = "CharNotes commands and examples:", deDE = "CharNotes-Befehle mit Beispielen:" },
+    HELP_MAIN = { enUS = "/cn - open notes; /cn add Name-Realm - add/edit; /cn edit Name-Realm - same; /cn target - use target", deDE = "/cn - Notizen öffnen; /cn add Name-Realm - hinzufügen/bearbeiten; /cn edit Name-Realm - identisch; /cn target - Ziel übernehmen" },
+    HELP_OPTIONS = { enUS = "/cn options - settings; /cn tags - tag manager; /cn menus on|off - player menus; /cn sound next|test|on|off - sound", deDE = "/cn options - Einstellungen; /cn tags - Tag-Verwaltung; /cn menus on|off - Spielermenüs; /cn sound next|test|on|off - Ton" },
+    HELP_NOTE = { enUS = "/cn note Name-Realm | Text - save note; /cn punk Name-Realm or /cn mark Name-Realm - PUNK; /cn ignore Name-Realm - ignore", deDE = "/cn note Name-Realm | Text - Notiz speichern; /cn punk Name-Realm oder /cn mark Name-Realm - PUNK; /cn ignore Name-Realm - ignorieren" },
+    HELP_TRANSFER = { enUS = "/cn export - copy export; /cn import - paste and import", deDE = "/cn export - Export kopieren; /cn import - einfügen und importieren" },
+    HELP_SYNC = { enUS = "/cn trust Name-Realm - trust; /cn untrust Name-Realm - revoke; /cn peers - list; /cn sync Name-Realm - sync", deDE = "/cn trust Name-Realm - freigeben; /cn untrust Name-Realm - entziehen; /cn peers - auflisten; /cn sync Name-Realm - synchronisieren" },
+    HELP_GUILD = { enUS = "/cn guild Name-Realm - share with guild; /cn inbox - list; /cn accept 1 - accept; /cn reject 1 - reject", deDE = "/cn guild Name-Realm - mit Gilde teilen; /cn inbox - auflisten; /cn accept 1 - annehmen; /cn reject 1 - ablehnen" },
+    HELP_MISC = { enUS = "/cn status or /cn diag - diagnostics; /cn help - show this help", deDE = "/cn status oder /cn diag - Diagnose; /cn help - diese Hilfe anzeigen" },
     ENTER_CHARACTER = { enUS = "Enter Name-Realm.", deDE = "Bitte Name-Realm angeben." },
     USAGE_PUNK = { enUS = "Usage: /cn punk Name-Realm", deDE = "Syntax: /cn punk Name-Realm" },
     USAGE_IGNORE = { enUS = "Usage: /cn ignore Name-Realm", deDE = "Syntax: /cn ignore Name-Realm" },
@@ -197,17 +213,48 @@ local strings = {
 }
 
 CN.L = {}
-CN.LANGUAGE_ORDER = {'client', 'de', 'en'}
+CN.LANGUAGE_ORDER = {'client', 'de', 'en', 'fr', 'es', 'it', 'pt', 'pl', 'uk', 'ro', 'bg', 'hu', 'tr', 'ru', 'ko'}
 CN.LANGUAGE_LABEL_KEYS = {
     client = 'LANGUAGE_CLIENT',
     de = 'LANGUAGE_GERMAN',
     en = 'LANGUAGE_ENGLISH',
+    fr = 'LANGUAGE_FRENCH',
+    es = 'LANGUAGE_SPANISH',
+    it = 'LANGUAGE_ITALIAN',
+    pt = 'LANGUAGE_PORTUGUESE',
+    pl = 'LANGUAGE_POLISH',
+    uk = 'LANGUAGE_UKRAINIAN',
+    ro = 'LANGUAGE_ROMANIAN',
+    bg = 'LANGUAGE_BULGARIAN',
+    hu = 'LANGUAGE_HUNGARIAN',
+    tr = 'LANGUAGE_TURKISH',
+    ru = 'LANGUAGE_RUSSIAN',
+    ko = 'LANGUAGE_KOREAN',
 }
-local languageLocales = {de = 'deDE', en = 'enUS'}
+local languageLocales = {
+    de = 'deDE', en = 'enUS', fr = 'frFR', es = 'esES', it = 'itIT',
+    pt = 'ptBR', pl = 'plPL', uk = 'ukUA', ro = 'roRO', bg = 'bgBG',
+    hu = 'huHU', tr = 'trTR', ru = 'ruRU', ko = 'koKR',
+}
+local clientLocaleAliases = {
+    enUS = 'enUS', enGB = 'enUS', deDE = 'deDE', frFR = 'frFR',
+    esES = 'esES', esMX = 'esES', itIT = 'itIT', ptBR = 'ptBR', ruRU = 'ruRU', koKR = 'koKR',
+}
 
 function CN:ResolveLocale(language)
-    local locale = languageLocales[language] or (GetLocale and GetLocale())
-    return locale == 'deDE' and 'deDE' or 'enUS'
+    if languageLocales[language] then return languageLocales[language] end
+    local clientLocale = GetLocale and GetLocale() or 'enUS'
+    return clientLocaleAliases[clientLocale] or 'enUS'
+end
+
+function CN:RegisterLocale(locale, translations)
+    if type(locale) ~= 'string' or type(translations) ~= 'table' then return end
+    for key, value in pairs(translations) do
+        if strings[key] and type(value) == 'string' then
+            strings[key][locale] = value
+            if self.locale == locale then self.L[key] = value end
+        end
+    end
 end
 
 function CN:LoadLocale(language)

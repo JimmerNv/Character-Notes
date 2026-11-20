@@ -2,13 +2,32 @@
 ## Title: |cffff9855CharNotes: PUNK|r
 ## Notes: Account-wide character notes and group alerts for WoW Forever. /cn opens CharNotes. ElvUI is optional.
 ## Notes-deDE: Accountweite Spielernotizen und Gruppenwarnungen für WoW Forever. /cn öffnet CharNotes. ElvUI ist optional.
+## Notes-frFR: Notes de personnages partagées sur le compte et alertes de groupe pour WoW Forever. /cn ouvre CharNotes. ElvUI est facultatif.
+## Notes-esES: Notas de personajes para toda la cuenta y alertas de grupo para WoW Forever. /cn abre CharNotes. ElvUI es opcional.
+## Notes-esMX: Notas de personajes para toda la cuenta y alertas de grupo para WoW Forever. /cn abre CharNotes. ElvUI es opcional.
+## Notes-itIT: Note dei personaggi condivise nell'account e avvisi di gruppo per WoW Forever. /cn apre CharNotes. ElvUI è facoltativo.
+## Notes-ptBR: Notas de personagens para toda a conta e alertas de grupo para WoW Forever. /cn abre o CharNotes. ElvUI é opcional.
+## Notes-ruRU: Общие для учетной записи заметки о персонажах и групповые предупреждения для WoW Forever. /cn открывает CharNotes. ElvUI необязателен.
+## Notes-koKR: WoW Forever용 계정 공용 캐릭터 메모 및 파티 경고입니다. /cn으로 CharNotes를 엽니다. ElvUI는 선택 사항입니다.
 ## Author: Custom
-## Version: 1.8.0
+## Version: 1.10.0
 ## OptionalDeps: ElvUI, Titan
 ## SavedVariables: ElvUICharNotesDB
 ## DefaultState: enabled
 
 Strings.lua
+Locales\frFR.lua
+Locales\esES.lua
+Locales\itIT.lua
+Locales\ptBR.lua
+Locales\plPL.lua
+Locales\ukUA.lua
+Locales\roRO.lua
+Locales\bgBG.lua
+Locales\huHU.lua
+Locales\trTR.lua
+Locales\ruRU.lua
+Locales\koKR.lua
 Core.lua
 Tags.lua
 UI.lua

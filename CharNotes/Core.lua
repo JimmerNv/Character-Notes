@@ -2,7 +2,7 @@ local ADDON, CN = ...
 local L = CN.L
 _G.ElvUI_CharNotes = CN
 CN.ADDON = ADDON
-CN.VERSION = '1.8.0'
+CN.VERSION = '1.10.0'
 CN.COLOR = '|cffff9855'
 CN.RESET = '|r'
 CN.db = nil
@@ -476,7 +476,10 @@ function CN:ResolveContext(data, owner)
 end
 
 function CN:Help()
-    for _, key in ipairs({'HELP_MAIN', 'HELP_OPTIONS', 'LANGUAGE_USAGE', 'HELP_NOTE', 'HELP_SYNC', 'HELP_MISC'}) do
+    for _, key in ipairs({
+        'HELP_HEADER', 'HELP_MAIN', 'HELP_NOTE', 'HELP_OPTIONS', 'LANGUAGE_USAGE',
+        'HELP_TRANSFER', 'HELP_SYNC', 'HELP_GUILD', 'HELP_MISC',
+    }) do
         self:Print(L[key])
     end
 end
@@ -490,7 +493,7 @@ function CN:Slash(text)
     elseif cmd == 'status' or cmd == 'diag' then self:Status()
     elseif cmd == 'options' then self:ShowOptions()
     elseif cmd == 'tags' then self:ShowWindow(); self:ShowTagManager()
-    elseif cmd == 'language' then self:SetLanguage(rest:lower())
+    elseif cmd == 'language' or cmd == 'lang' then self:SetLanguage(rest:lower())
     elseif cmd == 'add' or cmd == 'edit' then
         if rest ~= '' then self:OpenEditor(rest) else self:Print(L.ENTER_CHARACTER) end
     elseif cmd == 'mark' or cmd == 'punk' then
