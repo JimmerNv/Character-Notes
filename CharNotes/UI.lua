@@ -63,13 +63,38 @@ local function button(parent, text, w, h, action, emphasize)
     return b
 end
 
+local function attachEditCaret(e, multi)
+    -- The client caret can disappear against custom backdrops. Draw a steady,
+    -- high-contrast insertion mark at the EditBox cursor's actual position.
+    local caret = e:CreateTexture(nil, 'OVERLAY')
+    caret:SetTexture(WHITE)
+    caret:SetVertexColor(.30, .72, 1, 1)
+    caret:SetSize(3, 16)
+    caret:SetPoint('TOPLEFT', e, 'TOPLEFT', multi and 4 or 9, multi and -6 or -5)
+    caret:Hide()
+    e:HookScript('OnCursorChanged', function(self, x, y, _, height)
+        if type(x) ~= 'number' or type(y) ~= 'number' then return end
+        caret:ClearAllPoints()
+        caret:SetPoint('TOPLEFT', self, 'TOPLEFT', x + (multi and 4 or 9), y - (multi and 6 or 5))
+        caret:SetHeight(math.max(12, math.min(height or 16, 24)))
+        if self:HasFocus() then caret:Show() end
+    end)
+    e:HookScript('OnEditFocusGained', function() caret:Show() end)
+    e:HookScript('OnEditFocusLost', function() caret:Hide() end)
+    return caret
+end
+
 local function edit(parent, w, h, multi)
     local e = CreateFrame('EditBox', nil, parent)
     e:SetSize(w, h or 27)
     e:SetAutoFocus(false)
+    e:EnableMouse(true)
+    if multi and e.SetAltArrowKeyMode then e:SetAltArrowKeyMode(false) end
+    if multi and e.SetHistoryLines then e:SetHistoryLines(0) end
     e:SetFontObject(ChatFontNormal)
     e:SetTextColor(.94, .96, .99)
     e:SetTextInsets(multi and 4 or 9, multi and 4 or 9, multi and 6 or 5, multi and 6 or 5)
+    attachEditCaret(e, multi)
     if multi then
         e:SetMultiLine(true)
         e:SetMaxLetters(0)
@@ -135,14 +160,19 @@ local function addScrollControl(box, scroll, child, increment)
             scroll:SetVerticalScroll(value)
         end
     end)
-    scroll:EnableMouseWheel(true)
-    scroll:SetScript('OnMouseWheel', function(_, delta)
+    local function wheel(_, delta)
         local _, max = rail:GetMinMaxValues()
         local current = scroll:GetVerticalScroll() or 0
         local newValue = math.min(max or 0, math.max(0, current - delta * (increment or 35)))
         scroll:SetVerticalScroll(newValue)
         rail:SetValue(newValue)
-    end)
+    end
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript('OnMouseWheel', wheel)
+    -- The EditBox fills the viewport and receives mouse events itself. Forward
+    -- its wheel events to the same scroll handler used by the ScrollFrame.
+    child:EnableMouseWheel(true)
+    child:SetScript('OnMouseWheel', wheel)
     scroll:SetScript('OnVerticalScroll', function(_, value)
         if not refreshing and math.abs(rail:GetValue() - value) > .5 then
             rail:SetValue(value)
@@ -175,6 +205,9 @@ local function separator(parent, x, y, width)
     line:SetPoint('TOPLEFT', x, y)
     return line
 end
+
+CN.widgets = {button = button, label = label, edit = edit, backdrop = backdrop,
+    scroll = addScrollControl, resizeEdit = resizeEditToContent, attachCaret = attachEditCaret}
 
 function CN:ApplyLanguageTheme()
     if not self.headerBlue or not self.headerYellow then return end
@@ -236,6 +269,15 @@ function CN:InitializeUI()
     close:SetPoint('TOPRIGHT', -13, -12)
     local options = button(w, L.OPTIONS, 89, 26, function() CN:ShowOptions() end)
     options:SetPoint('RIGHT', close, 'LEFT', -9, 0)
+    local journal = button(w, L.GENERAL_NOTES, 155, 26, function() CN:ShowNotebook() end)
+    local planner = button(w, L.TALENT_PLANNER, 155, 26, function() CN:ShowTalentPlanner() end)
+    planner:SetPoint('RIGHT', options, 'LEFT', -8, 0)
+    journal:SetPoint('RIGHT', planner, 'LEFT', -8, 0)
+    w:SetClampedToScreen(true)
+    w:HookScript('OnShow', function()
+        w:SetScale(math.min(1, (UIParent:GetWidth()-12)/800, (UIParent:GetHeight()-12)/590))
+    end)
+    w:HookScript('OnHide', function() CN:CloseNoteViews() end)
     separator(w, 19, -62, 762)
     self:ApplyLanguageTheme()
 
@@ -254,8 +296,8 @@ function CN:InitializeUI()
         hint:SetShown(e:GetText() == '')
         CN:RefreshList()
     end)
-    search:SetScript('OnEditFocusGained', function() hint:Hide() end)
-    search:SetScript('OnEditFocusLost', function(e) hint:SetShown(e:GetText() == '') end)
+    search:HookScript('OnEditFocusGained', function() hint:Hide() end)
+    search:HookScript('OnEditFocusLost', function(e) hint:SetShown(e:GetText() == '') end)
     self.searchHint = hint
 
     local listPane = CreateFrame('Frame', nil, w)
@@ -288,7 +330,7 @@ function CN:InitializeUI()
 
     local punk = check(w)
     punk:SetPoint('TOPLEFT', 299, -148)
-    punk:SetChecked(true)
+    punk:SetChecked(false)
     self.punkCheck = punk
     local punkLabel = label(w, L.PUNK_HINT, 12)
     punkLabel:SetPoint('LEFT', punk, 'RIGHT', 9, 0)
@@ -330,7 +372,7 @@ function CN:InitializeUI()
         count:SetText(L.NOTE_SIZE:format(len))
         if len > 1200 then count:SetTextColor(1, .37, .38) else count:SetTextColor(.65, .69, .76) end
     end)
-    note:SetScript('OnCursorChanged', function(_, x, y, width, height)
+    note:HookScript('OnCursorChanged', function(_, x, y, width, height)
         if type(y) ~= 'number' or type(height) ~= 'number' then return end
         local offset = noteScroll:GetVerticalScroll() or 0
         local top, bottom = -y, -y + height
@@ -486,7 +528,7 @@ function CN:ShowOptions()
         backdrop(panel)
         panel:Hide()
         self.optionsPanel = panel
-        self.window:SetScript('OnHide', function() panel:Hide() end)
+        self.window:HookScript('OnHide', function() panel:Hide() end)
 
         local title = label(panel, L.OPTIONS_TITLE, 15)
         title:SetPoint('TOPLEFT', 16, -13)
@@ -605,6 +647,7 @@ end
 
 function CN:ShowWindow()
     if not self.window then return end
+    self:CloseNoteViews()
     self.window:Show()
     self.window:Raise()
     self:RefreshList()
@@ -617,7 +660,7 @@ function CN:OpenEditor(name)
     self.currentName = (entry and entry.name) or name
     self.nameEdit:SetText(self.currentName)
     self.noteEdit:SetText(entry and entry.note or '')
-    self.punkCheck:SetChecked(entry and entry.punk or not entry)
+    self.punkCheck:SetChecked(entry and entry.punk or false)
     self.ignoreCheck:SetChecked(name ~= '' and self:IsPlayerIgnored(self.currentName) or false)
     self.editorTags = self:CloneTagIds(entry and entry.tags)
     self:RefreshEditorTags()
@@ -644,7 +687,7 @@ function CN:DeleteEditor()
     self.currentName = nil
     self.nameEdit:SetText('')
     self.noteEdit:SetText('')
-    self.punkCheck:SetChecked(true)
+    self.punkCheck:SetChecked(false)
     self.ignoreCheck:SetChecked(false)
     self.editorTags = {}
     self:RefreshEditorTags()
@@ -712,8 +755,8 @@ function CN:ShowTagManager()
             CN.tagIconPage = 1
             CN:RefreshTagIconSelection()
         end)
-        iconSearch:SetScript('OnEditFocusGained', function() iconSearchHint:Hide() end)
-        iconSearch:SetScript('OnEditFocusLost', function(field)
+        iconSearch:HookScript('OnEditFocusGained', function() iconSearchHint:Hide() end)
+        iconSearch:HookScript('OnEditFocusLost', function(field)
             iconSearchHint:SetShown(field:GetText() == '')
         end)
         self.tagIconSearch = iconSearch
@@ -1149,7 +1192,7 @@ function CN:ShowGuildInboxDetail(index)
         local note = edit(scroll, 602, 280, true)
         scroll:SetScrollChild(note)
         local refresh = addScrollControl(detailBox, scroll, note, 40)
-        note:SetScript('OnEditFocusGained', function(self) self:ClearFocus() end)
+        note:HookScript('OnEditFocusGained', function(self) self:ClearFocus() end)
         self.guildInboxDetailTitle = title
         self.guildInboxDetailText = note
         self.guildInboxDetailScroll = scroll

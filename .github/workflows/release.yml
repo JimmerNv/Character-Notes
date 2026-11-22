@@ -59,51 +59,8 @@ jobs:
       - name: Generate player-facing release notes
         shell: bash
         run: |
-          previous_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' HEAD^ 2>/dev/null || true)"
-          revision_range="HEAD"
-          if [[ -n "$previous_tag" ]]; then revision_range="refs/tags/${previous_tag}..HEAD"; fi
-
-          python3 - "$revision_range" <<'PY' > dist/release-notes.md
-          import os
-          import re
-          import subprocess
-          import sys
-
-          sections = {
-              "feat": "New Features",
-              "fix": "Bug Fixes",
-              "perf": "Performance",
-              "security": "Security",
-              "revert": "Reverts",
-          }
-          grouped = {kind: [] for kind in sections}
-          pattern = re.compile(r"^(feat|fix|perf|security|revert)(?:\(([^)]+)\))?(!)?:\s+(.+)$", re.I)
-          subjects = subprocess.check_output(
-              ["git", "log", "--no-merges", "--format=%s", sys.argv[1]], text=True
-          ).splitlines()
-          for subject in subjects:
-              match = pattern.fullmatch(subject.strip())
-              if not match:
-                  continue
-              kind, scope, breaking, description = match.groups()
-              if scope:
-                  description = f"**{scope}:** {description}"
-              if breaking:
-                  description = f"**BREAKING:** {description}"
-              entries = grouped[kind.lower()]
-              if description not in entries:
-                  entries.append(description)
-
-          print(f"# {os.environ['RELEASE_PRODUCT']} {os.environ['RELEASE_TAG']} — WoW Forever\n")
-          for kind, heading in sections.items():
-              if grouped[kind]:
-                  print(f"## {heading}\n")
-                  for item in grouped[kind]:
-                      print(f"- {item}")
-                  print()
-          if not any(grouped.values()):
-              print("No player-facing changes were recorded in Conventional Commit subjects.")
-          PY
+          python3 scripts/generate_release_notes.py \
+            --tag "$RELEASE_TAG" --product "$RELEASE_PRODUCT" > dist/release-notes.md
 
       - name: Publish the ZIP and checksum on GitHub
         shell: bash

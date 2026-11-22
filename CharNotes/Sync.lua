@@ -2,8 +2,8 @@ local _, CN = ...
 local L = CN.L
 local PREFIX = 'CNForever2'
 local CHUNK = 175
-local MAX_PARTS = 90
-local MAX_EXPORT_LINE = 16000
+local MAX_PARTS = 180
+local MAX_EXPORT_LINE = 32000
 
 local function hex(s)
     return (s:gsub('.', function(c) return string.format('%02X', string.byte(c)) end))
@@ -12,6 +12,151 @@ end
 local function unhex(s)
     if type(s) ~= 'string' or #s % 2 ~= 0 or not s:match('^[%x]*$') then return nil end
     return (s:gsub('..', function(c) return string.char(tonumber(c, 16)) end))
+end
+
+-- General notes use length-prefixed fields so tabs, newlines and talent data
+-- survive addon messages without evaluating data received from other players.
+local function field(value)
+    value = value or ''
+    return tostring(#value) .. ':' .. value
+end
+
+local function mapText(values, maxValue)
+    local keys, result = {}, {}
+    for id, value in pairs(values or {}) do
+        if type(id) ~= 'number' or id < 1 or id > 2147483647 or id % 1 ~= 0 or
+                type(value) ~= 'number' or value < 1 or value > maxValue or value % 1 ~= 0 then return nil end
+        keys[#keys+1] = id
+        if #keys > 240 then return nil end
+    end
+    table.sort(keys)
+    for _, id in ipairs(keys) do result[#result+1] = id .. ':' .. values[id] end
+    return table.concat(result, ',')
+end
+
+local function encodeGeneral(note)
+    if type(note) ~= 'table' or type(note.title) ~= 'string' or #note.title < 1 or
+            #note.title > 160 or note.title:find('[\r\n]') or type(note.body) ~= 'string' or
+            #note.body > 6000 then return nil end
+    local build = note.build
+    if build and (type(build) ~= 'table' or not CN.talents.spec[build.class] or
+            type(build.ranks) ~= 'table' or (build.choices and type(build.choices) ~= 'table')) then return nil end
+    local ranks = mapText(build and build.ranks, 100)
+    local choices = mapText(build and build.choices, 2147483647)
+    if not ranks or not choices then return nil end
+    local raw = field(note.title)..field(note.body)..field(build and build.class or '')..
+        field(ranks)..field(choices)
+    local payload = hex(raw)
+    if #payload > CHUNK * MAX_PARTS then return nil end
+    return payload
+end
+
+local function encodeGeneralMany(note)
+    if type(note) ~= 'table' or type(note.title) ~= 'string' or #note.title < 1 or
+            #note.title > 160 or note.title:find('[\r\n]') or type(note.body) ~= 'string' or
+            #note.body > 6000 then return nil end
+    local builds = CN:CopyNoteBuilds(note)
+    if not builds then return nil end
+    local selected = #builds > 0 and (note.activeBuild or 1) or 0
+    if type(selected) ~= 'number' or selected % 1 ~= 0 or selected < 0 or selected > #builds then return nil end
+    local fields = {field(note.title),field(note.body),field(tostring(#builds)),field(tostring(selected))}
+    for _, entry in ipairs(builds) do
+        local ranks = mapText(entry.build.ranks,100)
+        local choices = mapText(entry.build.choices,2147483647)
+        if not ranks or not choices then return nil end
+        fields[#fields+1] = field(entry.name)..field(entry.build.class)..field(ranks)..field(choices)
+    end
+    local payload = hex(table.concat(fields))
+    return #payload <= CHUNK * MAX_PARTS and payload or nil
+end
+
+local function decodeGeneralMany(payload)
+    local raw = unhex(payload)
+    if not raw or #raw > CHUNK * MAX_PARTS / 2 then return nil end
+    local pos = 1
+    local function read()
+        local first, last, digits = raw:find('(%d+):',pos)
+        if first ~= pos or not digits or #digits > 5 then return nil end
+        local length = tonumber(digits)
+        if length > 7000 or last + length > #raw then return nil end
+        local value = raw:sub(last+1,last+length)
+        pos = last+length+1
+        return value
+    end
+    local function readMap(value,maxValue)
+        local result,parts = {},{}
+        if value == '' then return result end
+        for pair in value:gmatch('[^,]+') do
+            local id,number = pair:match('^(%d+):(%d+)$')
+            id,number=tonumber(id),tonumber(number)
+            if not id or not number or id < 1 or id > 2147483647 or id % 1 ~= 0 or
+                    number < 1 or number > maxValue or number % 1 ~= 0 or result[id] then return nil end
+            result[id]=number
+            parts[#parts+1]=pair
+            if #parts > 240 then return nil end
+        end
+        return table.concat(parts,',') == value and result or nil
+    end
+    local title,body,countText,selectedText=read(),read(),read(),read()
+    if not title or #title < 1 or #title > 160 or title:match('^%s*$') or title:find('[\r\n]') or
+            not body or #body > 6000 or not countText or not countText:match('^%d+$') or
+            not selectedText or not selectedText:match('^%d+$') then return nil end
+    local count,selected=tonumber(countText),tonumber(selectedText)
+    if not count or count > CN.MAX_BUILDS_PER_NOTE or not selected or
+            selected ~= (count == 0 and 0 or math.floor(selected)) or
+            (count > 0 and (selected < 1 or selected > count)) then return nil end
+    local builds={}
+    for i=1,count do
+        local name,class,rankText,choiceText=read(),read(),read(),read()
+        if not name or #name < 1 or #name > 60 or name:match('^%s*$') or name:find('[\r\n\t]') or
+                not class or not CN.talents.spec[class] or not rankText or not choiceText then return nil end
+        local ranks,choices=readMap(rankText,100),readMap(choiceText,2147483647)
+        if not ranks or not choices then return nil end
+        builds[i]={name=name,build={class=class,ranks=ranks,choices=choices}}
+    end
+    if pos ~= #raw+1 then return nil end
+    return {title=title,body=body,builds=builds,activeBuild=count > 0 and selected or nil}
+end
+
+local function decodeGeneral(payload)
+    local raw = unhex(payload)
+    if not raw or #raw > CHUNK * MAX_PARTS / 2 then return nil end
+    local pos = 1
+    local function read()
+        local first, last, digits = raw:find('(%d+):', pos)
+        if first ~= pos or not digits or #digits > 5 then return nil end
+        local length = tonumber(digits)
+        if length > 7000 or last + length > #raw then return nil end
+        local value = raw:sub(last+1, last+length)
+        pos = last+length+1
+        return value
+    end
+    local title, body, class, rankText, choiceText = read(), read(), read(), read(), read()
+    if not title or #title < 1 or #title > 160 or title:match('^%s*$') or title:find('[\r\n]') or
+            not body or #body > 6000 or not class or not rankText or not choiceText or
+            pos ~= #raw + 1 then return nil end
+    local function readMap(value, maxValue)
+        local result, parts = {}, {}
+        if value == '' then return result end
+        for pair in value:gmatch('[^,]+') do
+            local id, number = pair:match('^(%d+):(%d+)$')
+            id, number = tonumber(id), tonumber(number)
+            if not id or not number or id < 1 or id > 2147483647 or id % 1 ~= 0 or
+                    number < 1 or number > maxValue or number % 1 ~= 0 or result[id] then return nil end
+            result[id] = number
+            parts[#parts+1] = pair
+            if #parts > 240 then return nil end
+        end
+        if table.concat(parts, ',') ~= value then return nil end
+        return result
+    end
+    local ranks, choices = readMap(rankText, 100), readMap(choiceText, 2147483647)
+    if not ranks or not choices then return nil end
+    if class == '' and rankText == '' and choiceText == '' then
+        return {title = title, body = body}
+    end
+    if not CN.talents.spec[class] then return nil end
+    return {title = title, body = body, build = {class = class, ranks = ranks, choices = choices}}
 end
 
 local function encodeTags(entry)
@@ -188,6 +333,43 @@ function CN:QueueRecord(e, kind, target)
     return true, count
 end
 
+function CN:ShareGeneralNote(id, channel, target)
+    local note = self.db.generalNotes[id]
+    if not note then return false, L.GENERAL_NO_SAVED_NOTE end
+    if channel == 'GUILD' then
+        if not IsInGuild or not IsInGuild() then return false, L.GUILD_NOT_MEMBER end
+    elseif channel == 'RAID' then
+        if not IsInRaid or not IsInRaid() then return false, L.GENERAL_NOT_IN_RAID end
+    elseif channel == 'PARTY' then
+        if not IsInGroup or not IsInGroup() or (IsInRaid and IsInRaid()) then
+            return false, L.GENERAL_NOT_IN_PARTY
+        end
+    elseif channel == 'WHISPER' then
+        local key, label = self:Normalize(target)
+        if not key then return false, L.ENTER_CHARACTER end
+        target = label
+    else return false, L.GENERAL_INVALID_CHANNEL end
+    local builds = self:CopyNoteBuilds(note)
+    if not builds then return false, L.INVALID_BUILD end
+    -- Keep the original one-build wire format for peers running v1.12.
+    local legacy = #builds == 0 or (#builds == 1 and builds[1].name == L.DEFAULT_BUILD:format(1))
+    local kind = legacy and 'N' or 'M'
+    local payload = legacy and encodeGeneral({title=note.title,body=note.body,
+        build=builds[1] and builds[1].build}) or encodeGeneralMany(note)
+    if not payload then return false, L.SYNC_PROTOCOL_LIMIT end
+    local count = math.ceil(#payload / CHUNK)
+    self.pendingOut = self.pendingOut or {}
+    if #self.pendingOut + count > 3000 then return false, L.SYNC_QUEUE_FULL end
+    local packetId = tostring(math.random(100000,999999))
+    for i=1,count do
+        self.pendingOut[#self.pendingOut+1] = {
+            msg = string.format('%s|%s|%d|%d|%s', kind, packetId, i, count,
+                payload:sub((i-1)*CHUNK+1,i*CHUNK)), channel = channel, target = target,
+        }
+    end
+    return true, count
+end
+
 function CN:TickOutgoing(elapsed)
     if not self.pendingOut or #self.pendingOut == 0 then return end
     self.sendingElapsed = (self.sendingElapsed or 0) + elapsed
@@ -257,13 +439,18 @@ end
 
 function CN:ReceivePacket(message, channel, sender)
     if type(message) ~= 'string' or type(sender) ~= 'string' or #message > 255 then return end
-    local kind, id, part, count, data = message:match('^([GS])|(%d+)|(%d+)|(%d+)|([0-9A-F]+)$')
+    local kind, id, part, count, data = message:match('^([GSNM])|(%d+)|(%d+)|(%d+)|([0-9A-F]+)$')
     if not kind then return end
     local key, senderLabel = self:Normalize(sender)
     if not key then return end
     local myKey = self:FromUnit('player')
     if key == myKey then return end
-    if kind == 'S' then
+    if kind == 'N' or kind == 'M' then
+        if channel ~= 'WHISPER' and channel ~= 'PARTY' and channel ~= 'RAID' and channel ~= 'GUILD' then return end
+        if channel == 'GUILD' and (not IsInGuild or not IsInGuild()) then return end
+        if channel == 'PARTY' and (not IsInGroup or not IsInGroup()) then return end
+        if channel == 'RAID' and (not IsInRaid or not IsInRaid()) then return end
+    elseif kind == 'S' then
         if channel ~= 'WHISPER' or not self.db.trusted[key] then return end
     else
         if channel ~= 'GUILD' or not IsInGuild or not IsInGuild() then return end
@@ -271,7 +458,7 @@ function CN:ReceivePacket(message, channel, sender)
     part, count = tonumber(part), tonumber(count)
     if not part or not count or count < 1 or count > MAX_PARTS or part > count or part < 1 or #id > 10 then return end
     self.receiving = self.receiving or {}
-    local identifier = kind .. ':' .. key .. ':' .. id
+    local identifier = kind .. ':' .. channel .. ':' .. key .. ':' .. id
     local cur = self.receiving[identifier]
     if not cur or cur.count ~= count or cur.expires < time() then
         -- Prevent unbounded memory growth if peers stop mid-transfer.
@@ -280,15 +467,35 @@ function CN:ReceivePacket(message, channel, sender)
             if r.expires < time() then self.receiving[k] = nil else size = size + 1 end
         end
         if size > 80 then return end
-        cur = {count = count, parts = {}, received = 0, expires = time() + 100,
+        cur = {count = count, parts = {}, received = 0, expires = time() + 180,
             sender = senderLabel, kind = kind}
         self.receiving[identifier] = cur
     end
-    if not cur.parts[part] then cur.parts[part] = data; cur.received = cur.received + 1 end
+    if not cur.parts[part] then
+        cur.parts[part] = data
+        cur.received = cur.received + 1
+        cur.expires = time() + 180
+    end
     if cur.received < cur.count then return end
     self.receiving[identifier] = nil
     local full = table.concat(cur.parts)
     if #full > MAX_EXPORT_LINE then return end
+    if kind == 'N' or kind == 'M' then
+        local note = kind == 'N' and decodeGeneral(full) or decodeGeneralMany(full)
+        if not note then return end
+        self.receivedGeneralThrottle = self.receivedGeneralThrottle or {}
+        local limit = self.receivedGeneralThrottle[key] or {time = time(), count = 0}
+        if time() - limit.time > 60 then limit.time, limit.count = time(), 0 end
+        limit.count = limit.count + 1
+        self.receivedGeneralThrottle[key] = limit
+        if limit.count > 10 then return end
+        local inbox = self.db.generalInbox
+        if #inbox >= 50 then table.remove(inbox,1) end
+        inbox[#inbox+1] = {sender = senderLabel, channel = channel, note = note, received = time()}
+        self:Print(L.GENERAL_RECEIVED:format(senderLabel, note.title:gsub('|', '||')))
+        if self.RefreshGeneralInbox then self:RefreshGeneralInbox() end
+        return
+    end
     local entryKey, entry, tagDefinitions = decode(full)
     if not entryKey then return end
     if kind == 'S' then
@@ -313,6 +520,27 @@ function CN:ReceivePacket(message, channel, sender)
         self:Print(L.GUILD_RECEIVED:format(senderLabel, entry.name))
         if self.RefreshInbox then self:RefreshInbox() end
     end
+end
+
+function CN:AcceptGeneralInbox(index)
+    local inbox = self.db.generalInbox
+    local item = inbox[index]
+    if not item then return false end
+    local id, err = self:SaveGeneralNote(nil, item.note.title, item.note.body,
+        item.note.builds or item.note.build,item.note.activeBuild)
+    if not id then self:Print(err); return false end
+    table.remove(inbox,index)
+    self:Print(L.GENERAL_ACCEPTED:format(item.note.title))
+    if self.notebook and self.notebook.refresh then self.notebook.refresh() end
+    if self.RefreshGeneralInbox then self:RefreshGeneralInbox() end
+    return true
+end
+
+function CN:RejectGeneralInbox(index)
+    if not self.db.generalInbox[index] then return false end
+    table.remove(self.db.generalInbox,index)
+    if self.RefreshGeneralInbox then self:RefreshGeneralInbox() end
+    return true
 end
 
 function CN:AcceptInbox(index)

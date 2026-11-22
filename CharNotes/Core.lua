@@ -2,7 +2,7 @@ local ADDON, CN = ...
 local L = CN.L
 _G.ElvUI_CharNotes = CN
 CN.ADDON = ADDON
-CN.VERSION = '1.10.0'
+CN.VERSION = '1.13.4'
 CN.COLOR = '|cffff9855'
 CN.RESET = '|r'
 CN.db = nil
@@ -87,11 +87,14 @@ function CN:EnsureDB()
     if type(ElvUICharNotesDB) ~= 'table' then ElvUICharNotesDB = {} end
     local d = ElvUICharNotesDB
     self.db = d
+    if type(d.generalNotes) ~= 'table' then d.generalNotes = {} end
+    if type(d.talentTemplates) ~= 'table' then d.talentTemplates = {} end
     if type(d.entries) ~= 'table' then d.entries = {} end
     if type(d.tags) ~= 'table' then d.tags = {} end
     if type(d.ignored) ~= 'table' then d.ignored = {} end
     if type(d.trusted) ~= 'table' then d.trusted = {} end
     if type(d.inbox) ~= 'table' then d.inbox = {} end
+    if type(d.generalInbox) ~= 'table' then d.generalInbox = {} end
     if type(d.config) ~= 'table' then d.config = {} end
     local c = d.config
     if not self.LANGUAGE_LABEL_KEYS[c.language] then c.language = 'client' end
@@ -482,6 +485,7 @@ function CN:Help()
     }) do
         self:Print(L[key])
     end
+    self:Print('/cn notes — ' .. L.GENERAL_NOTES .. '   /cn talents — ' .. L.TALENT_PLANNER)
 end
 
 function CN:Slash(text)
@@ -490,6 +494,8 @@ function CN:Slash(text)
     local cmd, rest = text:match('^(%S+)%s*(.-)$')
     cmd = cmd:lower()
     if cmd == 'help' then self:Help()
+    elseif cmd == 'notes' then self:ShowNotebook()
+    elseif cmd == 'talents' then self:ShowTalentPlanner()
     elseif cmd == 'status' or cmd == 'diag' then self:Status()
     elseif cmd == 'options' then self:ShowOptions()
     elseif cmd == 'tags' then self:ShowWindow(); self:ShowTagManager()
@@ -504,7 +510,7 @@ function CN:Slash(text)
         local who, note = rest:match('^(%S+)%s*|%s*(.*)$')
         if who then
             local e = self:Get(who)
-            local ok, err = self:Store(who, note, e and e.punk or true)
+            local ok, err = self:Store(who, note, e and e.punk or false)
             self:Print(ok and L.NOTE_SAVED or err)
         else self:Print(L.USAGE_NOTE) end
     elseif cmd == 'menus' then
@@ -567,6 +573,10 @@ function CN:Status()
         type(canaccessvalue) == 'function' and L.YES or L.NO))
     self:Print(L.STATUS_MENU_API:format(menu and L.YES or L.NO, self.db and self.db.config.contextMenus and L.ON or L.OFF,
         self.menuHookCount or 0, self.menuState or L.STATUS_NOT_INITIALIZED, self.groupTooltipHookCount or 0))
+    if self.notebook then
+        self:Print(L.STATUS_COMPONENT:format(L.GENERAL_NOTES,
+            self.notebook.nativeNoteEditor and 'InputScrollFrameTemplate' or 'ScrollFrame'))
+    end
     for _, id in ipairs({'UI', 'Menus', 'Visuals', 'Sync', 'ElvUI'}) do
         local state = self.startup and self.startup[id]
         if state ~= true and (id ~= 'ElvUI' or E) then
