@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write release notes from every commit since the previous release tag."""
+"""Write public commit subjects and full bodies since the previous release tag."""
 
 import argparse
 import re
@@ -13,13 +13,6 @@ SECTIONS = {
     "perf": "Performance",
     "security": "Security",
     "revert": "Reverts",
-    "docs": "Documentation",
-    "refactor": "Refactoring",
-    "test": "Tests",
-    "build": "Build",
-    "ci": "CI",
-    "chore": "Maintenance",
-    "style": "Style",
 }
 PATTERN = re.compile(r"^([a-z]+)(?:\(([^)]+)\))?(!)?:\s+(.+)$", re.I)
 
@@ -47,34 +40,42 @@ def main():
     except subprocess.CalledProcessError:
         previous = None
     revision_range = f"refs/tags/{previous}..HEAD" if previous else "HEAD"
-    subjects = git("log", "--no-merges", "--format=%h%x09%s", revision_range).splitlines()
+    # NUL separators preserve multiline bodies, blank lines, and tabs without
+    # confusing prose with a new commit. Git commit messages cannot contain NUL.
+    fields = git("log", "--no-merges", "-z", "--format=%h%x00%s%x00%b", revision_range).split("\0")
+    if fields and fields[-1] == "":
+        fields.pop()
+    if len(fields) % 3:
+        raise ValueError("Unexpected commit record format")
     groups = {name: [] for name in SECTIONS}
-    groups["other"] = []
-    for entry in subjects:
-        if not entry:
-            continue
-        short_hash, subject = entry.split("\t", 1)
+    for index in range(0, len(fields), 3):
+        short_hash, subject, body = fields[index:index + 3]
         match = PATTERN.fullmatch(subject.strip())
         if match and match.group(1).lower() in SECTIONS:
             kind, scope, breaking, description = match.groups()
             label = f"{scope}: {description}" if scope else description
             if breaking:
                 label = f"BREAKING: {label}"
-            groups[kind.lower()].append((label, short_hash))
-        else:
-            groups["other"].append((subject, short_hash))
+            groups[kind.lower()].append((label, short_hash, body))
 
     print(f"# {args.product} {args.tag} — WoW Forever\n")
-    for kind, title in (*SECTIONS.items(), ("other", "Other Changes")):
+    for kind, title in SECTIONS.items():
         if groups[kind]:
             print(f"## {title}\n")
-            for description, short_hash in groups[kind]:
+            for description, short_hash, body in groups[kind]:
                 # Commit subjects are untrusted text; keep them on one Markdown line.
                 description = description.replace("\\", "\\\\").replace("`", "\\`")
                 print(f"- {description} (`{short_hash}`)")
+                if body.strip():
+                    print()
+                    # Nest the original Markdown under its commit. Preserve
+                    # lists, code blocks, paragraphs, and breaking-change notes.
+                    for line in body.rstrip("\n").splitlines():
+                        print("  " + line if line else "")
+                    print()
             print()
-    if not subjects:
-        print("No changes since the previous release.")
+    if not any(groups.values()):
+        print("No player-facing changes since the previous release.")
 
 
 if __name__ == "__main__":

@@ -12,3 +12,7 @@ Desktop.ini
 WTF/
 Cache/
 Logs/
+
+# Python test/build caches
+__pycache__/
+*.py[cod]

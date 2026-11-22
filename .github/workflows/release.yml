@@ -53,8 +53,11 @@ jobs:
         shell: bash
         run: |
           shopt -s failglob
-          luac5.1 -p CharNotes/*.lua
+          lua5.1 syntax_check.lua
+          luac5.1 -p tests/*.lua
           for test in tests/*.lua; do lua5.1 "$test"; done
+          lua5.1 feature_check.lua
+          python3 -m unittest discover -s tests -p "test_*.py"
 
       - name: Generate player-facing release notes
         shell: bash
