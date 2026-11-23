@@ -223,7 +223,7 @@ CN:RegisterLocale('koKR', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "초기화되지 않음",
     STARTUP_ERROR = "%s 시작 오류: %s",
-    STARTED = "CharNotes PUNK %s 로드됨. 연동 세부 정보는 /cn status를 사용하세요.",
+    STARTED = "CharNotes %s 로드됨. 연동 세부 정보는 /cn status를 사용하세요.",
     COMPONENT_UI = "인터페이스",
     COMPONENT_Menus = "메뉴",
     COMPONENT_Visuals = "표시",

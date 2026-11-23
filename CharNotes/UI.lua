@@ -59,7 +59,12 @@ local function button(parent, text, w, h, action, emphasize)
     backdrop(b, emphasize and .96 or .88, emphasize)
     b:SetScript('OnEnter', function(self) backdrop(self, nil, nil, true) end)
     b:SetScript('OnLeave', function(self) backdrop(self, self.cnAccent and .96 or .88, self.cnAccent) end)
-    if action then b:SetScript('OnClick', action) end
+    if action then
+        b:SetScript('OnClick', function(...)
+            if CN.LogEvent then CN:LogEvent('UI_BUTTON_CLICKED', 'common-button') end
+            return action(...)
+        end)
+    end
     return b
 end
 
@@ -119,7 +124,12 @@ local function check(parent, onClick)
     tex:SetPoint('TOPLEFT', 4, -4)
     tex:SetPoint('BOTTOMRIGHT', -4, 4)
     b:SetCheckedTexture(tex)
-    if onClick then b:SetScript('OnClick', onClick) end
+    if onClick then
+        b:SetScript('OnClick', function(...)
+            if CN.LogEvent then CN:LogEvent('UI_BUTTON_CLICKED', 'checkbox') end
+            return onClick(...)
+        end)
+    end
     return b
 end
 
@@ -259,7 +269,7 @@ function CN:InitializeUI()
     headerYellow:Hide()
     self.headerYellow = headerYellow
 
-    local title = label(w, 'CharNotes  ' .. ORANGE .. '[PUNK]|r', 16)
+    local title = label(w, 'CharNotes  v' .. tostring(self.VERSION or ''), 16)
     title:SetPoint('TOPLEFT', 20, -16)
     self.headerTitle = title
     local subtitle = label(w, L.SUBTITLE, 11, 'muted')
@@ -273,6 +283,8 @@ function CN:InitializeUI()
     local planner = button(w, L.TALENT_PLANNER, 155, 26, function() CN:ShowTalentPlanner() end)
     planner:SetPoint('RIGHT', options, 'LEFT', -8, 0)
     journal:SetPoint('RIGHT', planner, 'LEFT', -8, 0)
+    local support = button(w, L.SUPPORT, 88, 26, function() CN:ShowSupport() end)
+    support:SetPoint('RIGHT', journal, 'LEFT', -8, 0)
     w:SetClampedToScreen(true)
     w:HookScript('OnShow', function()
         w:SetScale(math.min(1, (UIParent:GetWidth()-12)/800, (UIParent:GetHeight()-12)/590))

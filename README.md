@@ -1,12 +1,12 @@
 # Character-Notes
 
-Character-Notes packages **CharNotes: PUNK** for **WoW Forever only**. It keeps account-wide character notes, marks selected players, and offers optional group alerts, tooltips, context-menu actions, data transfer, and opt-in addon-message sharing.
+Character-Notes packages **CharNotes** for **WoW Forever only**. It keeps account-wide character notes, marks selected players, and offers optional group alerts, tooltips, context-menu actions, data transfer, and opt-in addon-message sharing.
 
 ## Installation
 
 1. Download the release ZIP and extract it into the WoW Forever `Interface/AddOns` directory.
 2. Confirm that the installed path is `Interface/AddOns/ElvUI_CharNotes/ElvUI_CharNotes.toc`.
-3. Start the game and enable **CharNotes: PUNK** on the AddOns screen.
+3. Start the game and enable **CharNotes** on the AddOns screen.
 
 The repository name is deliberately different from the installable folder name. The ZIP contains exactly one top-level folder: `ElvUI_CharNotes`. 
 

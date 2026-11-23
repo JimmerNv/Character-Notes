@@ -223,7 +223,7 @@ CN:RegisterLocale('huHU', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Nincs inicializálva",
     STARTUP_ERROR = "Hiba a(z) %s indításakor: %s",
-    STARTED = "A CharNotes PUNK %s betöltődött. Az integráció részleteihez használd: /cn status.",
+    STARTED = "A CharNotes %s betöltődött. Az integráció részleteihez használd: /cn status.",
     COMPONENT_UI = "Kezelőfelület",
     COMPONENT_Menus = "Menük",
     COMPONENT_Visuals = "Megjelenítés",

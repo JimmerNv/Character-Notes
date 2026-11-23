@@ -173,6 +173,7 @@ function CN:SetEntryTags(name, tags)
     if unchanged then return true end
 
     entry.tags = normalized
+    if self.LogEvent then self:LogEvent('TAGS_ASSIGNED', 'count=' .. tostring(#normalized)) end
     entry.updated = math.max(time(), (tonumber(entry.updated) or 0) + 1)
     entry.writer = self.db.node
     self:Changed(key)
@@ -263,6 +264,7 @@ function CN:CreateTag(name, icon, showTooltip, showChat, showFrames, framePoint,
     self.db.tags[id] = {id = id, name = name, icon = icon, showTooltip = showTooltip ~= false,
         showChat = showChat ~= false, showFrames = showFrames == true, framePoint = validPoint(framePoint),
         frameSize = validFrameSize(frameSize), updated = time(), writer = self.db.node}
+    if self.LogEvent then self:LogEvent('TAG_CREATED', 'definition') end
     return id
 end
 
@@ -278,6 +280,7 @@ function CN:UpdateTag(id, name, icon, showTooltip, showChat, showFrames, framePo
     tag.framePoint = validPoint(framePoint)
     tag.frameSize = validFrameSize(frameSize)
     tag.updated, tag.writer = math.max(time(), (tag.updated or 0) + 1), self.db.node
+    if self.LogEvent then self:LogEvent('TAG_UPDATED', 'definition') end
     touchEntries(self, id, false)
     if self.RefreshTagManager then self:RefreshTagManager(id) end
     return true
@@ -286,6 +289,7 @@ end
 function CN:DeleteTag(id)
     if not self.db.tags[id] then return false end
     self.db.tags[id] = nil
+    if self.LogEvent then self:LogEvent('TAG_DELETED', 'definition') end
     touchEntries(self, id, true)
     return true
 end

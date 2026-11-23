@@ -146,6 +146,7 @@ function CN:SaveGeneralNote(id, title, body, buildsOrBuild, activeBuild)
     notes[id] = {title=title, body=body or '', created=old and old.created or now,
         updated=now, builds=builds, activeBuild=selected,
         build=selected and P.copy(builds[selected].build) or nil}
+    if self.LogEvent then self:LogEvent('NOTE_SAVED', 'general; ' .. (old and 'updated' or 'created')) end
     return id
 end
 

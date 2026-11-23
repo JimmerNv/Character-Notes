@@ -96,7 +96,18 @@ local function talentClick(button, key)
     else
         candidate = P.adjust(f.model,f.build,node.id,key=='RightButton' and -1 or 1)
     end
-    if candidate then accept(f,candidate); tooltip(button) else status(f,L.BLOCKED_RANK) end
+    if candidate then
+        if CN.LogEvent then
+            local before = tonumber(f.build.ranks[node.id]) or 0
+            local after = tonumber(candidate.ranks[node.id]) or 0
+            local kind = after > before and 'POINT_ADDED' or (after < before and 'POINT_REMOVED' or 'CHOICE_CHANGED')
+            CN:LogEvent(kind, 'class=' .. tostring(f.build.class) .. '; node=' .. tostring(node.id) .. '; rank=' .. before .. '->' .. after)
+        end
+        accept(f,candidate); tooltip(button)
+    else
+        if CN.LogEvent then CN:LogEvent('TALENT_ACTION_BLOCKED', 'class=' .. tostring(f.build.class)) end
+        status(f,L.BLOCKED_RANK)
+    end
 end
 
 local function talentButton(pane)
@@ -292,6 +303,7 @@ local function makePlanner()
         b:SetScript('OnClick',function()
             local model = P.model(token)
             local draft = f.drafts[token] or P.blank(token)
+            if CN.LogEvent then CN:LogEvent('CLASS_SELECTED', 'class=' .. tostring(token)) end
             f.classSelected = true
             f.model,f.build = model,draft
             if f.note and model and P.valid(model,draft) then
@@ -322,7 +334,10 @@ local function makePlanner()
         if f.model then templates(f) else status(f,L.TREE_UNAVAILABLE) end
     end)
     W.action(f,L.RESET_BUILD,145,422,-443,function()
-        if f.model then accept(f,P.blank(f.build.class)) end
+        if f.model then
+            if CN.LogEvent then CN:LogEvent('TALENTS_RESET', 'class=' .. tostring(f.build.class)) end
+            accept(f,P.blank(f.build.class))
+        end
     end)
     local back = W.action(f,L.BACK,197,580,-443,function() f:Hide() end)
     W.caption(f,L.TALENT_CLICKS,20,-488,11)

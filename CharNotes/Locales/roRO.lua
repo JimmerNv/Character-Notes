@@ -223,7 +223,7 @@ CN:RegisterLocale('roRO', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Neinițializat",
     STARTUP_ERROR = "Eroare la pornirea %s: %s",
-    STARTED = "CharNotes PUNK %s a fost încărcat. Folosește /cn status pentru detalii despre integrare.",
+    STARTED = "CharNotes %s a fost încărcat. Folosește /cn status pentru detalii despre integrare.",
     COMPONENT_UI = "Interfață",
     COMPONENT_Menus = "Meniuri",
     COMPONENT_Visuals = "Afișare",

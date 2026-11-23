@@ -3,7 +3,7 @@
 ## Project and supported client
 
 - Repository: `Character-Notes`.
-- Product: **CharNotes: PUNK / Character Notes & Alerts**, for **WoW Forever only**.
+- Product: **CharNotes / Character Notes & Alerts**, for **WoW Forever only**.
 - Runtime source: `CharNotes/`.
 - Installed addon directory: `ElvUI_CharNotes`.
 - Manifest: `CharNotes/ElvUI_CharNotes.toc`; verify its current version and load order.

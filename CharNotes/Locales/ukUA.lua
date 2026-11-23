@@ -223,7 +223,7 @@ CN:RegisterLocale('ukUA', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Не ініціалізовано",
     STARTUP_ERROR = "Помилка запуску %s: %s",
-    STARTED = "CharNotes PUNK %s завантажено. Використовуйте /cn status для відомостей про інтеграцію.",
+    STARTED = "CharNotes %s завантажено. Використовуйте /cn status для відомостей про інтеграцію.",
     COMPONENT_UI = "Інтерфейс",
     COMPONENT_Menus = "Меню",
     COMPONENT_Visuals = "Відображення",

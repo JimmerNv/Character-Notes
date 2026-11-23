@@ -2,7 +2,7 @@ local ADDON, CN = ...
 local L = CN.L
 _G.ElvUI_CharNotes = CN
 CN.ADDON = ADDON
-CN.VERSION = '1.13.4'
+CN.VERSION = '1.13.11'
 CN.COLOR = '|cffff9855'
 CN.RESET = '|r'
 CN.db = nil
@@ -113,6 +113,7 @@ function CN:EnsureDB()
     if type(d.node) ~= 'string' or d.node == '' then
         d.node = tostring(time()) .. '-' .. tostring(math.random(10000, 99999))
     end
+    if self.InitializeSupportLog then self:InitializeSupportLog() end
     self:SanitizeTagDefinitions()
     -- Migrate an unfinished pre-release that used the accidental "pink" name.
     for _, e in pairs(d.entries) do
@@ -147,6 +148,7 @@ function CN:Store(name, note, punk, tags)
         updated = math.max(time(), (old and tonumber(old.updated) or 0) + 1),
         writer = self.db.node, deleted = false,
     }
+    if self.LogEvent then self:LogEvent('NOTE_SAVED', 'character') end
     self:Changed(key)
     return true
 end
@@ -160,6 +162,7 @@ function CN:Delete(name)
         updated = math.max(time(), (old and tonumber(old.updated) or 0) + 1),
         writer = self.db.node,
     }
+    if self.LogEvent then self:LogEvent('NOTE_DELETED', 'character') end
     self:Changed(key)
     return true
 end
@@ -168,6 +171,7 @@ function CN:TogglePunk(name)
     local old = self:Get(name)
     local newValue = not (old and old.punk)
     local ok, err = self:Store(name, old and old.note or '', newValue, old and old.tags)
+    if ok and self.LogEvent then self:LogEvent('PUNK_TOGGLED', newValue and 'enabled' or 'disabled') end
     if ok then self:Print((newValue and L.PUNK_MARKED or L.PUNK_UNMARKED):format(old and old.name or name)) end
     return ok, err
 end
@@ -485,7 +489,7 @@ function CN:Help()
     }) do
         self:Print(L[key])
     end
-    self:Print('/cn notes — ' .. L.GENERAL_NOTES .. '   /cn talents — ' .. L.TALENT_PLANNER)
+    self:Print('/cn notes — ' .. L.GENERAL_NOTES .. '   /cn talents — ' .. L.TALENT_PLANNER .. '   /cn support — ' .. L.SUPPORT)
 end
 
 function CN:Slash(text)
@@ -494,6 +498,7 @@ function CN:Slash(text)
     local cmd, rest = text:match('^(%S+)%s*(.-)$')
     cmd = cmd:lower()
     if cmd == 'help' then self:Help()
+    elseif cmd == 'support' then self:ShowSupport()
     elseif cmd == 'notes' then self:ShowNotebook()
     elseif cmd == 'talents' then self:ShowTalentPlanner()
     elseif cmd == 'status' or cmd == 'diag' then self:Status()
@@ -559,7 +564,10 @@ local function startPart(id, fn)
     if CN.startup[id] == true then return end
     local ok, err = pcall(fn)
     CN.startup[id] = ok and true or tostring(err)
-    if not ok then CN:Print(L.STARTUP_ERROR:format(L['COMPONENT_' .. id], tostring(err))) end
+    if not ok then
+        if CN.RecordDiagnosticError then CN:RecordDiagnosticError('STARTUP_' .. id, err) end
+        CN:Print(L.STARTUP_ERROR:format(L['COMPONENT_' .. id], tostring(err)))
+    end
 end
 
 function CN:Status()
@@ -595,6 +603,8 @@ function CN:FinishInitialize()
     loadSettings()
     if self.initialized then return end
     self.initialized = true
+    if self.LogEvent then self:LogEvent('ADDON_INITIALIZED', 'runtime') end
+    if self.InstallErrorCapture then self:InstallErrorCapture() end
     -- Problems in one integration must not block slash commands or other modules.
     startPart('UI', function() self:InitializeUI() end)
     startPart('Menus', function() self:RegisterMenus() end)

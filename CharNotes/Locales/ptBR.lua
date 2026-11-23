@@ -223,7 +223,7 @@ CN:RegisterLocale('ptBR', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Não inicializado",
     STARTUP_ERROR = "Erro ao iniciar %s: %s",
-    STARTED = "CharNotes PUNK %s carregado. Use /cn status para ver os detalhes da integração.",
+    STARTED = "CharNotes %s carregado. Use /cn status para ver os detalhes da integração.",
     COMPONENT_UI = "Interface",
     COMPONENT_Menus = "Menus",
     COMPONENT_Visuals = "Exibição",

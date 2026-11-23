@@ -223,7 +223,7 @@ CN:RegisterLocale('trTR', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Başlatılmadı",
     STARTUP_ERROR = "%s başlatılırken hata: %s",
-    STARTED = "CharNotes PUNK %s yüklendi. Entegrasyon ayrıntıları için /cn status kullanın.",
+    STARTED = "CharNotes %s yüklendi. Entegrasyon ayrıntıları için /cn status kullanın.",
     COMPONENT_UI = "Arayüz",
     COMPONENT_Menus = "Menüler",
     COMPONENT_Visuals = "Görünüm",

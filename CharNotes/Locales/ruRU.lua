@@ -223,7 +223,7 @@ CN:RegisterLocale('ruRU', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Не инициализировано",
     STARTUP_ERROR = "Ошибка запуска %s: %s",
-    STARTED = "CharNotes PUNK %s загружен. Подробности интеграции: /cn status.",
+    STARTED = "CharNotes %s загружен. Подробности интеграции: /cn status.",
     COMPONENT_UI = "Интерфейс",
     COMPONENT_Menus = "Меню",
     COMPONENT_Visuals = "Отображение",

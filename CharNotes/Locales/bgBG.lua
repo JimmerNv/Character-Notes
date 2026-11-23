@@ -223,7 +223,7 @@ CN:RegisterLocale('bgBG', {
     STATUS_COMPONENT = "%s: %s",
     STATUS_NOT_INITIALIZED = "Не е инициализирано",
     STARTUP_ERROR = "Грешка при стартиране на %s: %s",
-    STARTED = "CharNotes PUNK %s е зареден. Използвайте /cn status за подробности за интеграцията.",
+    STARTED = "CharNotes %s е зареден. Използвайте /cn status за подробности за интеграцията.",
     COMPONENT_UI = "Интерфейс",
     COMPONENT_Menus = "Менюта",
     COMPONENT_Visuals = "Изглед",
