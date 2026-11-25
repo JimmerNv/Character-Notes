@@ -22,7 +22,7 @@ local strings = {
     SUPPORT_CLEAR = { enUS = 'Clear errors/log', deDE = 'Fehler/Log löschen' },
     SUPPORT_CLEAR_SHORT = { enUS = 'Clear log', deDE = 'Log löschen' },
     SUPPORT_CLEAR_CONFIRM = { enUS = 'Click again to confirm', deDE = 'Zum Bestätigen erneut klicken' },
-    SUPPORT_HINT = { enUS = 'Copy with Ctrl+C; paste into the GitHub form. Issues are public. Check logs for personal data.', deDE = 'Mit Strg+C kopieren und in GitHub einfügen. Issues sind öffentlich. Logs auf persönliche Daten prüfen.' },
+    SUPPORT_HINT = { enUS = 'Copy with Ctrl+C; paste into the GitHub form. A free GitHub account is required; alternatively, leave a comment with this report on the addon page. Issues and comments are public. Check logs for personal data.', deDE = 'Mit Strg+C kopieren und in das GitHub-Formular einfügen. Dafür ist ein kostenloses GitHub-Konto nötig; alternativ einen Kommentar mit diesem Bericht auf der Addon-Seite schreiben. Issues und Kommentare sind öffentlich. Logs auf persönliche Daten prüfen.' },
     SUPPORT_STEPS = { enUS = 'Steps to reproduce', deDE = 'Schritte zum Reproduzieren' },
     SUPPORT_EXPECTED = { enUS = 'Expected behavior', deDE = 'Erwartetes Verhalten' },
     SUPPORT_EMPTY = { enUS = 'Select a report type and enter a title and description.', deDE = 'Meldungstyp wählen und Titel sowie Beschreibung eingeben.' },

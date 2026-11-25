@@ -10,7 +10,7 @@
 ## Notes-ruRU: Общие для учетной записи заметки о персонажах и групповые предупреждения для WoW Forever. /cn открывает CharNotes. ElvUI необязателен.
 ## Notes-koKR: WoW Forever용 계정 공용 캐릭터 메모 및 파티 경고입니다. /cn으로 CharNotes를 엽니다. ElvUI는 선택 사항입니다.
 ## Author: Custom
-## Version: 1.13.11
+## Version: 1.13.12
 ## OptionalDeps: ElvUI, Titan
 ## SavedVariables: ElvUICharNotesDB
 ## DefaultState: enabled
